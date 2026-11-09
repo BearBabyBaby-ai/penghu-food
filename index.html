@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>澎湖美食推薦</title>
+<link rel="icon" type="image/png" href="icons/app-icon.png">
+<link rel="apple-touch-icon" href="icons/app-icon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" />
+<style>
+  :root {
+    color-scheme: light;
+    --ui-font: "Microsoft JhengHei", "微軟正黑體", "PingFang TC", "Noto Sans TC", sans-serif;
+    --ink: #162e3d;
+    --muted: #506473;
+    --navy: #19394a;
+    --blue: #2468a5;
+    --line: #dbe5ea;
+    --page: #f2f6f7;
+    --paper: #fff;
+    --focus: #8e431a;
+    --gutter: clamp(14px, 3vw, 34px);
+    font-family: var(--ui-font);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--page); color: var(--ink); }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  a { color: var(--blue); text-underline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .wrap { max-width: 1320px; margin-inline: auto; padding-inline: var(--gutter); }
+  .skip { position: absolute; z-index: 1000; inset: 8px auto auto 8px; padding: 10px; background: white; transform: translateY(-140%); }
+  .skip:focus { transform: none; }
+
+  .hero { background: var(--navy); color: white; border-bottom: 4px solid #77b9bd; }
+  .hero-inner { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 112px; padding-block: 17px; }
+  .eyebrow { margin: 0 0 6px; color: #b9e1e0; font-size: .79rem; font-weight: 700; letter-spacing: .13em; }
+  h1 { margin: 0; font-size: clamp(1.7rem, 3.6vw, 2.55rem); letter-spacing: .045em; line-height: 1.15; }
+  .hero-stat { margin: 0; white-space: nowrap; padding: 8px 12px; border: 1px solid #67969f; border-radius: 9px; color: #e5f4f4; font-size: .82rem; }
+  .hero-stat strong { color: white; font-size: .94rem; }
+  .hero-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .back-page { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 10px; border: 1px solid #8fbcc2; border-radius: 8px; background: #234a5d; color: white; font-size: .82rem; font-weight: 750; white-space: nowrap; }
+  .back-page:hover { background: #2d5a6f; }
+
+  main { padding-block: 16px 38px; }
+  .layout { display: grid; gap: 15px; }
+  .panel { min-width: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 3px 12px #1a3e4c0a; }
+  h2 { margin: 0; font-size: 1.22rem; line-height: 1.35; }
+  .filters { padding: clamp(13px, 2vw, 19px); }
+  .search { display: flex; align-items: center; gap: 8px; min-height: 42px; border: 1px solid #a9bbc5; border-radius: 8px; padding: 0 11px; background: #f8fbfc; }
+  .search:focus-within { outline: 2px solid #276c89; outline-offset: 2px; }
+  .search-caption { flex: none; color: #334f61; font-size: .77rem; font-weight: 750; white-space: nowrap; }
+  .search input { min-width: 0; width: 100%; min-height: 40px; border: 0; outline: 0; background: none; color: var(--ink); }
+  .search input::placeholder { color: #5e7382; }
+  .results-search { min-width: 0; min-height: 38px; padding-inline: 8px; }
+  .results-search input { min-height: 36px; font-size: .82rem; }
+  .filter-row { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 9px; align-items: start; margin-top: 10px; }
+  .filters .filter-row:first-child { margin-top: 0; }
+  .filter-label { margin: 0; padding-top: 9px; font-size: .83rem; font-weight: 750; color: #334f61; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; min-height: 36px; border: 1px solid transparent; border-radius: 7px; white-space: nowrap; color: white; background: var(--tone); font-size: .81rem; font-weight: 750; }
+  .chip[data-value=""] { color: #294b60; background: #e8f0f4; border-color: #bed0da; }
+  .category-chips .chip { border-radius: 999px; }
+  .quick-chips .chip { color: #765215; background: #fbf5e8; border-color: #eacb8d; border-radius: 999px; }
+  .quick-chips .chip[aria-pressed="true"] { background: #8a5d1a; color: #fff; box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px #8a5d1a; }
+  .quick-status { margin: 7px 0 0; color: var(--muted); font-size: .78rem; }
+  .chip[aria-pressed="true"] { box-shadow: inset 0 0 0 2px white, 0 0 0 2px var(--tone); }
+  .chip[aria-pressed="true"]::after { content: "✓"; font-size: .78em; }
+  .chip:hover { filter: brightness(1.07); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: currentColor; flex: none; }
+
+  .map-panel { padding: clamp(10px, 1.6vw, 17px); }
+  .map-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 13px; margin-bottom: 10px; }
+  .map-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; }
+  .map-status, .results-head p { margin: 0; color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+  .map-frame { position: relative; isolation: isolate; height: clamp(420px, 53vh, 590px); border: 1px solid #b8d2de; border-radius: 10px; overflow: hidden; }
+  #map { height: 100%; background: #c7ddf0; font-family: var(--ui-font); }
+  .map-unavailable { position: absolute; z-index: 700; bottom: 11px; left: 8px; max-width: calc(100% - 55px); padding: 5px 9px; background: #fff8e9; color: #694718; border: 1px solid #e8cda0; border-radius: 6px; font-size: .74rem; pointer-events: none; }
+  .map-credit { position: absolute; z-index: 600; right: 7px; bottom: 7px; color: var(--ink); }
+  .map-credit summary { display: grid; place-items: center; width: 26px; height: 26px; margin-left: auto; list-style: none; border: 1px solid #a9c5bd; border-radius: 6px; background: white; font-weight: 750; cursor: pointer; }
+  .map-credit summary::-webkit-details-marker { display: none; }
+  .map-credit a { display: block; margin-top: 3px; padding: 4px 7px; background: white; border: 1px solid #a9c5bd; border-radius: 6px; font-size: .72rem; }
+  .pin-icon { border: none; background: none; }
+  .pin-icon .pin-dot { position: absolute; inset: 0; display: grid; place-items: center; color: white; background: var(--pin); border: 2px solid white; border-radius: 50%; font-size: 10px; font-weight: 850; line-height: 1; box-shadow: 0 1px 5px #173a3b60; }
+  .pin-icon.is-active .pin-dot { outline: 2px solid var(--navy); outline-offset: 1px; }
+  .map-popup .leaflet-popup-content-wrapper { border-radius: 12px; }
+  .map-popup .leaflet-popup-content { margin: 13px 15px; line-height: 1.45; }
+  .map-popup .leaflet-popup-close-button { font-family: var(--ui-font); width: 28px; height: 28px; line-height: 28px; }
+  .popup-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; margin: 0 13px 6px 0; }
+  .popup-card h3 { margin: 0; color: #254e78; font-size: 1.05rem; line-height: 1.3; overflow-wrap: anywhere; }
+  .popup-card .badge-region { border-radius: 999px; padding-inline: 9px; }
+  .popup-card .details-grid { margin: 8px 0 0; gap: 5px 8px; }
+  .popup-card .details-grid dt { color: #536a7b; }
+  .popup-card .details-grid dd { color: var(--ink); }
+  .popup-card .details-grid dd .badge { margin: 0 4px 2px 0; }
+  .popup-card .popup-go { display: inline-flex; align-items: center; min-height: 28px; padding: 0 8px; border-radius: 6px; background: #2468a5; color: white; text-decoration: none; white-space: nowrap; font-size: .78rem; font-weight: 750; }
+  .popup-card .popup-go:hover { background: #21598f; }
+  .popup-cluster h3 { margin: 0 9px 5px 0; font-size: .91rem; }
+  .popup-cluster ul { list-style: none; margin: 0; padding: 0; }
+  .popup-cluster li + li { border-top: 1px solid var(--line); }
+  .point-button { display: block; width: 100%; padding: 5px 2px; border: 0; background: transparent; color: var(--blue); font: inherit; text-align: left; overflow-wrap: anywhere; }
+  .point-button:hover { text-decoration: underline; }
+
+  .results-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 10px; margin: 5px 1px 10px; }
+  .results-heading { display: grid; gap: 2px; white-space: nowrap; }
+  #results { display: grid; gap: 13px; }
+  .group { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+  .group-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 8px; padding: 7px 10px; border-radius: 7px; background: var(--tone); color: white; font-size: .92rem; }
+  .group-title span:last-child { font-size: .76rem; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 8px; }
+
+  /* === 店家資訊卡片：每一張自動套用不同配色 === */
+  .card:nth-child(12n+1)  { --c-accent: #2563eb; --c-bg: #eff6ff; --c-border: #bfdbfe; }
+  .card:nth-child(12n+2)  { --c-accent: #0d9488; --c-bg: #f0fdfa; --c-border: #99f6e4; }
+  .card:nth-child(12n+3)  { --c-accent: #7c3aed; --c-bg: #f5f3ff; --c-border: #ddd6fe; }
+  .card:nth-child(12n+4)  { --c-accent: #d97706; --c-bg: #fffbeb; --c-border: #fde68a; }
+  .card:nth-child(12n+5)  { --c-accent: #e11d48; --c-bg: #fff1f2; --c-border: #fecdd3; }
+  .card:nth-child(12n+6)  { --c-accent: #0284c7; --c-bg: #f0f9ff; --c-border: #bae6fd; }
+  .card:nth-child(12n+7)  { --c-accent: #16a34a; --c-bg: #f0fdf4; --c-border: #bbf7d0; }
+  .card:nth-child(12n+8)  { --c-accent: #ea580c; --c-bg: #fff7ed; --c-border: #fed7aa; }
+  .card:nth-child(12n+9)  { --c-accent: #4f46e5; --c-bg: #eef2ff; --c-border: #c7d2fe; }
+  .card:nth-child(12n+10) { --c-accent: #c026d3; --c-bg: #fdf4ff; --c-border: #f5d0fe; }
+  .card:nth-child(12n+11) { --c-accent: #059669; --c-bg: #ecfdf5; --c-border: #a7f3d0; }
+  .card:nth-child(12n+12) { --c-accent: #dc2626; --c-bg: #fef2f2; --c-border: #fecaca; }
+
+  .card {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    padding: 10px 11px;
+    border: 1px solid var(--c-border, var(--line));
+    border-left: 5px solid var(--c-accent, var(--tone));
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--c-bg, #fff) 0%, #ffffff 88%);
+    transition: all .18s ease;
+  }
+  .card.is-selected {
+    border-color: var(--c-accent, var(--tone));
+    outline: 2px solid var(--c-accent, var(--tone));
+    background: var(--c-bg, #fff);
+  }
+  .card h4 { margin: 0; line-height: 1.35; font-size: 1.03rem; color: var(--c-accent, var(--ink)); overflow-wrap: anywhere; }
+  .card-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); align-items: start; gap: 8px; }
+  .card-line > :nth-child(2):not(:empty) { border-inline-start: 1px solid var(--c-border, var(--line)); padding-inline-start: 8px; }
+  .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+  .card-name-line { align-items: baseline; }
+  .card-field { margin: 0; color: var(--muted); font-size: .81rem; line-height: 1.5; overflow-wrap: anywhere; }
+  .card-field strong { color: var(--ink); font-weight: 750; }
+  .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .badge { display: inline-block; padding: 2px 6px; border-radius: 5px; background: var(--tone); color: white; font-size: .73rem; font-weight: 700; line-height: 1.4; }
+  .card .badge-region { background: var(--c-accent, var(--tone)); }
+  .badge-island { color: #305d71; background: #e7f2f7; }
+  .badge-sub { margin-left: 2px; color: var(--muted); font-size: .73rem; overflow-wrap: anywhere; }
+  .desktop-card-title, .desktop-nav-text { display: none; }
+  .card-top .card-nav { min-height: 30px; }
+  .action { display: inline-flex; align-items: center; justify-content: center; padding: 0 9px; min-height: 35px; border: 1px solid #b3c8d3; border-radius: 7px; background: white; color: #225371; font-size: .78rem; font-weight: 750; text-decoration: none; white-space: nowrap; }
+  .action:hover { background: #eef6f9; }
+  .action.primary { color: white; background: var(--c-accent, #2468a5); border-color: var(--c-accent, #2468a5); }
+  .action.primary:hover { filter: brightness(0.92); }
+  .details-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 8px; margin: 0; font-size: .8rem; line-height: 1.5; }
+  .details-grid dt { font-weight: 750; }
+  .details-grid dd { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+  .more { width: 100%; min-height: 37px; margin-top: 8px; color: var(--tone); border-color: var(--tone); }
+  .more:hover { background: var(--soft); }
+  .empty .action { margin-top: 10px; }
+  .empty { margin: 0; padding: 20px; text-align: center; border: 1px dashed #9db4a9; border-radius: 8px; background: white; color: var(--muted); }
+
+  @media (min-width: 900px) {
+    body > .hero, main.wrap { width: 75vw; max-width: none; margin-inline: auto; }
+    body > .hero { border-radius: 0 0 12px 12px; }
+    .back-page { display: none; }
+    .hero .wrap { max-width: none; padding-inline: clamp(14px, 2vw, 28px); }
+    main.wrap { padding-inline: 0; }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+      gap: 13px;
+      height: clamp(470px, 66vh, 760px);
+    }
+    .results-panel, .map-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .results-panel { padding: clamp(8px, 1.1vw, 13px); background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 3px 12px #1a3e4c0a; }
+    .results-head { flex: none; margin: 1px 1px 9px; }
+    #results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; align-content: start; padding: 3px 4px 3px 1px; }
+    .workspace .cards { grid-template-columns: minmax(0, 1fr); }
+    .map-head { flex: none; }
+    .map-frame { flex: 1; height: auto; min-height: 0; }
+    .card.has-point { cursor: pointer; }
+    .card.has-point:hover { border-color: var(--c-accent, var(--tone)); box-shadow: 0 3px 10px rgba(0,0,0,.08); }
+    .desktop-card-title { display: inline; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; }
+    .desktop-card-title:hover { filter: brightness(0.85); }
+    .desktop-nav-text { display: inline; }
+    .mobile-card-title, .mobile-nav-text { display: none; }
+  }
+  @media (max-width: 1040px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 899px) {
+    .map-panel { display: none; }
+    .action, .card-top .card-nav { min-height: 42px; }
+    .chip { min-height: 38px; }
+  }
+  @media (max-width: 620px) {
+    .hero-inner { min-height: 89px; gap: 6px; padding-block: 12px; }
+    .hero-stat { padding: 6px 7px; font-size: .69rem; }
+    .hero-stat strong { font-size: .78rem; }
+    .hero-main { gap: 7px; }
+    .back-page { min-height: 38px; padding: 0 8px; font-size: .76rem; }
+    .hero-main:has(.back-page:not([hidden])) h1 { font-size: min(1.7rem, calc((100vw - 214px) / 6.3)); }
+    .eyebrow { font-size: .69rem; }
+    .filter-row { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 9px; }
+    .filter-label { padding-top: 0; }
+    .cards { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">跳至店家篩選</a>
+<header class="hero" aria-labelledby="page-title">
+  <div class="wrap hero-inner">
+    <div class="hero-main">
+      <button class="back-page" type="button" id="back-page" hidden>‹ 上一頁</button>
+      <div>
+        <h1 id="page-title">澎湖美食推薦<h5 class="eyebrow">澎湖五鄉一市</h5></h1>
+      </div>
+    </div>
+    <p class="hero-stat"><strong id="total-food">–</strong> 筆店家資料</p>
+  </div>
+</header>
+<main class="wrap" id="content" tabindex="-1">
+  <noscript><p class="empty">請啟用 JavaScript 以使用店家篩選。</p></noscript>
+  <div class="layout">
+    <section class="panel filters" aria-label="快速關鍵字及主類別篩選">
+      <div class="filter-row">
+        <p class="filter-label" id="quick-label">快速關鍵字</p>
+        <div class="chips quick-chips" id="quick-keywords" role="group" aria-labelledby="quick-label"></div>
+      </div>
+      <p class="quick-status" id="quick-status" role="status" hidden></p>
+      <div class="filter-row">
+        <p class="filter-label" id="categories-label">主類別</p>
+        <div class="chips category-chips" id="categories" role="group" aria-labelledby="categories-label"></div>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <section class="results-panel" aria-labelledby="results-title">
+        <div class="results-head">
+          <div class="results-heading">
+            <h2 id="results-title">美食推薦</h2>
+            <p id="results-count" role="status" aria-live="polite">讀取中…</p>
+          </div>
+          <label class="search results-search" for="query">
+            <span class="search-caption">找店家</span>
+            <input id="query" type="search" disabled aria-label="找店家，可搜尋店名、類別、餐點或地址" placeholder="店名、餐點或地址">
+          </label>
+        </div>
+        <div id="results" tabindex="0" aria-labelledby="results-title"><p class="empty">正在讀取店家資料…</p></div>
+      </section>
+
+      <section class="panel map-panel" aria-labelledby="map-title">
+        <div class="map-head">
+          <div class="map-heading">
+            <h2 id="map-title" tabindex="-1">美食地圖</h2>
+            <p class="map-status" id="map-status" aria-live="polite">讀取中…</p>
+          </div>
+          <button class="action" type="button" id="fit-map">澎湖全覽</button>
+        </div>
+        <div class="map-frame">
+          <div id="map" role="region" aria-label="澎湖美食互動地圖"></div>
+          <details class="map-credit">
+            <summary aria-label="底圖授權" title="底圖授權">ⓘ</summary>
+            <a href="https://maps.nlsc.gov.tw/pro/use_clause.jsp" target="_blank" rel="noopener noreferrer">內政部國土測繪中心</a>
+          </details>
+          <div class="map-unavailable" id="tile-status" role="status" hidden>底圖暫時無法載入，可從店家卡片開啟 Google 地圖。</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"></script>
+<script>
+'use strict';
+
+const byId = id => document.getElementById(id);
+const desktop = window.matchMedia('(min-width: 900px)');
+// 熊熊綜合系統／美食清單
+const foodSheet = {
+  spreadsheetId: '1LOr4_3ugTHvTIi4UIfgVz2atVFh2K32zh7YKrrHxTwk',
+  tabId: '1582663006',
+  columns: 'A,B,C,D,E,F,G,H,I,K,L,N',
+  requiredColumn: 'D'
+};
+// 村里定位只讀景點、廟宇、其他店家的鄉市、村里及經緯度。
+const villageTabs = ['2085392869', '2137991614', '1777099957'];
+const quickKeywords = new Map([
+  ["北環島", {"regions": ["白沙鄉", "西嶼鄉"], "excludeTerms": {"白沙鄉": ["姑婆", "員貝", "吉貝", "鳥嶼", "目斗"]}}],
+  ["南環島", {"regions": ["馬公市"], "includeTerms": ["山水", "風櫃", "嵵裡", "井垵", "伍德", "鎖港", "五德", "興仁", "鐵線"]}],
+  ["東環島(湖西)", {"regions": ["湖西鄉"]}],
+  ["七美", {"regions": ["七美鄉"]}],
+  ["望安", {"regions": ["望安鄉"]}],
+  ["吉貝", {"regions": ["白沙鄉"], "includeTerms": ["吉貝"]}],
+  ["馬公市區", {"regions": ["馬公市"], "excludeTerms": {"馬公市": ["山水", "風櫃", "嵵裡", "井垵", "伍德", "鎖港", "五德", "興仁", "鐵線", "東衛", "菜園", "石泉", "光華", "西文澳", "虎井", "桶盤"]}}],
+  ["馬公郊區", {"regions": ["馬公市"], "excludePresets": ["馬公市區", "南環島"]}],
+  ["市區觀光", {"radiusKm": 0.3, "excludeTerms": {"*": ["虎井", "桶盤", "大倉"]}, "anchors": [[23.5634336, 119.5605422], [23.564694, 119.564039], [23.5651792, 119.5649382], [23.5647548, 119.5648526]]}],
+]);
+const cityTourism = quickKeywords.get('市區觀光');
+// 澎湖群島全覽範圍，含外圍離島及海域留白，依序為西南、東北。
+const penghuExtent = [
+  [23.1500000, 119.3000000],
+  [23.8166667, 119.7333333]
+];
+const overviewPadding = 20;
+const zoomStep = 0.25;
+const regionPalette = new Map([
+  ['馬公市', ['#2252a3', '#e8f0ff']],
+  ['湖西鄉', ['#08725f', '#e2f5ed']],
+  ['白沙鄉', ['#855905', '#fff2d0']],
+  ['西嶼鄉', ['#aa3e23', '#fdebe4']],
+  ['望安鄉', ['#6443a6', '#f0eaff']],
+  ['七美鄉', ['#9b2e65', '#fce8f2']]
+]);
+const categoryPalette = new Map([
+  ['主食', ['#a1342a', '#f9e7e3']],
+  ['小吃', ['#3e6426', '#e9f2e2']],
+  ['下午茶', ['#9b2868', '#f8e5f1']],
+  ['咖啡', ['#654126', '#f3e9de']],
+  ['飲品', ['#0f6486', '#e4f2fa']],
+  ['伴手禮', ['#5f409f', '#efe9fb']]
+]);
+const defaultColor = ['#425e71', '#ebf0f3'];
+const chunkSize = 24;
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function button(text, className, onClick) {
+  const node = element('button', className, text);
+  node.type = 'button';
+  node.addEventListener('click', onClick);
+  return node;
+}
+
+function webUrl(value) {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && url.hostname ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function externalLink(text, url, className) {
+  const node = element('a', className, text);
+  node.href = url;
+  node.target = '_blank';
+  node.rel = 'noopener noreferrer';
+  return node;
+}
+
+function styleColor(node, palette, value) {
+  const [tone, soft] = palette.get(value) || defaultColor;
+  node.style.setProperty('--tone', tone);
+  node.style.setProperty('--soft', soft);
+}
+
+function coordinates(lat, lng) {
+  if (lat === '' || lng === '' || lat == null || lng == null) return null;
+  const pair = [Number(lat), Number(lng)];
+  return Number.isFinite(pair[0]) && Number.isFinite(pair[1]) &&
+    Math.abs(pair[0]) <= 90 && Math.abs(pair[1]) <= 180 ? pair : null;
+}
+
+function mapsLink(lat, lng) {
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng);
+}
+
+function splitCategories(text) {
+  return [...new Set(text.split(/[／/、]/).map(part => part.trim()).filter(Boolean))];
+}
+
+function searchable(text) {
+  return text.normalize('NFKC').toLowerCase().replaceAll('臺', '台');
+}
+
+let food = [];
+let regionNames = [];
+let categoryNames = [];
+let foodReady = false;
+const state = { quick: '', category: '' };
+let matches = [];
+let activePoints = [];
+let selected = null;
+let map;
+let penghuBounds;
+let markerLayer;
+let selectedMarker;
+let drawnMarkers = new Map();
+const sheetReplies = new Map();
+let sheetRequestId = Date.now() % 1000000000;
+
+// 固定回應函式可安全忽略逾時後才到達的回應。
+window.penghuFoodSheetReply = response => sheetReplies.get(String(response?.reqId))?.(response);
+
+function fetchSheetRows({ tabId, columns, requiredColumn }) {
+  return new Promise((resolve, reject) => {
+    const requestId = String(++sheetRequestId);
+    const query = new URL('https://docs.google.com/spreadsheets/d/' + foodSheet.spreadsheetId + '/gviz/tq');
+    query.searchParams.set('gid', tabId);
+    query.searchParams.set('headers', '1');
+    query.searchParams.set('tq', 'select ' + columns + ' where ' + requiredColumn + ' is not null');
+    query.searchParams.set('tqx', 'out:json;responseHandler:penghuFoodSheetReply;reqId:' + requestId);
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = query.href;
+    const timeout = window.setTimeout(() => finish(new Error('讀取逾時')), 15000);
+
+    function finish(error, rows) {
+      window.clearTimeout(timeout);
+      sheetReplies.delete(requestId);
+      script.remove();
+      if (error) reject(error);
+      else resolve(rows);
+    }
+
+    sheetReplies.set(requestId, response => {
+      const table = response.table;
+      if (response.status === 'error' || !Array.isArray(table?.rows) ||
+          table.cols?.length !== columns.split(',').length) {
+        finish(new Error('資料格式無法讀取'));
+      } else {
+        finish(null, table.rows);
+      }
+    });
+    script.addEventListener('error', () => finish(new Error('無法連線')), { once: true });
+    document.head.append(script);
+  });
+}
+
+function sheetCellText(cell) {
+  return String(cell?.f ?? cell?.v ?? '').trim();
+}
+
+function normalizeRegion(value) {
+  const text = value.replace(/\s+/g, '');
+  return [...regionPalette.keys()].find(region => text === region || text === region.slice(0, -1)) || text;
+}
+
+function distanceKm([fromLat, fromLng], [toLat, toLng]) {
+  const radians = Math.PI / 180;
+  const h = Math.sin((toLat - fromLat) * radians / 2) ** 2 +
+    Math.cos(fromLat * radians) * Math.cos(toLat * radians) *
+    Math.sin((toLng - fromLng) * radians / 2) ** 2;
+  return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function locationPoint(point) {
+  return point && point[0] > 22 && point[0] < 25 && point[1] > 118 && point[1] < 121;
+}
+
+function groupVillageReferences(rows) {
+  const references = new Map();
+  for (const row of rows) {
+    const [region, rawVillage, lat, lng] = Array.from({ length: 4 }, (_, col) => sheetCellText(row?.c?.[col]));
+    const village = rawVillage.replace(/[村里]$/, '');
+    const point = coordinates(row?.c?.[2]?.v ?? lat, row?.c?.[3]?.v ?? lng);
+    if (!village || !locationPoint(point)) continue;
+    const key = normalizeRegion(region);
+    if (!references.has(key)) references.set(key, []);
+    references.get(key).push({ village, point });
+  }
+  return references;
+}
+
+function villageForStore(address, point, refs) {
+  const fromAddress = address.match(/(?:馬公市|湖西鄉|白沙鄉|西嶼鄉|望安鄉|七美鄉)([㐀-鿿]{1,3}?)[里村]/)?.[1];
+  if (fromAddress || !locationPoint(point)) return fromAddress || '';
+  let closest = '';
+  let maxDistance = 1.5;
+  for (const ref of refs) {
+    const distance = distanceKm(point, ref.point);
+    if (distance < maxDistance) {
+      closest = ref.village;
+      maxDistance = distance;
+    }
+  }
+  return closest;
+}
+
+function matchesQuickKeyword(item, preset) {
+  if (!preset) return true;
+  if (preset.regions && !preset.regions.includes(item.region)) return false;
+  const excluded = [...(preset.excludeTerms?.[item.region] || []), ...(preset.excludeTerms?.['*'] || [])];
+  if (excluded.some(term => item.location.includes(term))) return false;
+  if (preset.includeTerms && !preset.includeTerms.some(term => item.location.includes(term))) return false;
+  if (preset.anchors && item.tourismKm > preset.radiusKm) return false;
+  return !preset.excludePresets?.some(name => matchesQuickKeyword(item, quickKeywords.get(name)));
+}
+
+function mapFoodRows(rows, references) {
+  return rows.flatMap((row, index) => {
+    const cells = row?.c ?? [];
+    const [rawRegion, main, subtype, name, dish, picks, phone, address, hours, lat, lng, url] =
+      Array.from({ length: 12 }, (_, column) => sheetCellText(cells[column]));
+    const point = coordinates(cells[9]?.v ?? lat, cells[10]?.v ?? lng);
+    const mapUrl = webUrl(url) || (point ? mapsLink(point[0], point[1]) : '');
+    const region = normalizeRegion(rawRegion);
+    if (!name || !region || !mapUrl) return [];
+    const village = villageForStore(address, point, references.get(region) || []);
+    const location = [village, address].filter(Boolean).join(' ');
+    const island = region === '馬公市' ? (location + ' ' + name).match(/虎井|桶盤/)?.[0] : '';
+    const tourismKm = locationPoint(point) ? Math.min(...cityTourism.anchors.map(anchor => distanceKm(point, anchor))) : Infinity;
+    return [{
+      id: 'food-' + index, region, tags: splitCategories(main), subtype, name, dish, picks, phone,
+      address, hours, point, mapUrl, location, island, tourismKm,
+      search: searchable([region, main, subtype, name, dish, picks, address].join(' '))
+    }];
+  });
+}
+
+async function loadFood() {
+  byId('query').disabled = true;
+  byId('results-count').textContent = '讀取中…';
+  byId('map-status').textContent = '讀取中…';
+  byId('results').replaceChildren(element('p', 'empty', '正在讀取店家資料…'));
+  initializeMap();
+
+  const [storeResult, ...villageResults] = await Promise.allSettled([
+    fetchSheetRows(foodSheet),
+    ...villageTabs.map(tabId => fetchSheetRows({ tabId, columns: 'A,B,G,H', requiredColumn: 'B' }))
+  ]);
+  if (storeResult.status !== 'fulfilled') {
+    byId('results-count').textContent = '讀取失敗';
+    byId('map-status').textContent = '店家資料讀取失敗';
+    const notice = element('div', 'empty', '無法讀取店家資料。請確認網路或存取權限後重試。');
+    notice.append(element('br'), button('重新讀取', 'action', loadFood));
+    byId('results').replaceChildren(notice);
+    return;
+  }
+
+  const references = groupVillageReferences(villageResults.flatMap(result => result.status === 'fulfilled' ? result.value : []));
+  const status = byId('quick-status');
+  status.hidden = villageResults.every(result => result.status === 'fulfilled');
+  status.textContent = status.hidden ? '' : '部分村里點位讀取失敗，這次依已取得的資料篩選。';
+  food = mapFoodRows(storeResult.value, references);
+  const regions = new Set(food.map(item => item.region));
+  const categories = new Set(food.flatMap(item => item.tags));
+  regionNames = [...new Set([...regionPalette.keys(), ...regions])].filter(name => regions.has(name));
+  categoryNames = [...new Set([...categoryPalette.keys(), ...categories])].filter(name => categories.has(name));
+  byId('total-food').textContent = food.length;
+  makeChips('quick-keywords', 'quick', '全部', [...quickKeywords.keys()], new Map());
+  makeChips('categories', 'category', '全部主類別', categoryNames, categoryPalette);
+  byId('query').disabled = false;
+  foodReady = true;
+  if (history.state?.foodView) applyView(history.state.foodView);
+  else filterFood();
+}
+
+function setFilter(field, value) {
+  if (state[field] === value) return;
+  state[field] = value;
+  for (const chip of document.querySelectorAll('button[data-filter="' + field + '"]')) {
+    chip.setAttribute('aria-pressed', String(chip.dataset.value === value));
+  }
+  filterFood();
+  saveView(false);
+}
+
+// 手機端上一頁：每次切換篩選記一筆瀏覽紀錄，按畫面上的「上一頁」或手機返回鍵先退回前一個篩選畫面，
+// 退到最初畫面後再按，回到進入本頁之前的頁面。
+const emptyView = { quick: '', category: '', query: '' };
+const startedWithHistory = history.length > 1;
+let viewDepth = history.state?.foodView ? history.state.depth : 0;
+try {
+  if (!history.state?.foodView) history.replaceState({ foodView: emptyView, depth: 0, typing: false }, '');
+} catch {}
+
+function updateBackButton() {
+  byId('back-page').hidden = !(startedWithHistory || viewDepth > 0);
+}
+
+function saveView(typing) {
+  if (desktop.matches) return;
+  const view = { quick: state.quick, category: state.category, query: byId('query').value };
+  try {
+    if (typing && history.state?.typing) {
+      history.replaceState({ foodView: view, depth: viewDepth, typing }, '');
+    } else {
+      history.pushState({ foodView: view, depth: viewDepth + 1, typing }, '');
+      viewDepth += 1;
+    }
+  } catch {}
+  updateBackButton();
+}
+
+function applyView(view) {
+  const known = (field, value) => [...document.querySelectorAll('button[data-filter="' + field + '"]')]
+    .some(chip => chip.dataset.value === value);
+  state.quick = known('quick', view.quick) ? view.quick : '';
+  state.category = known('category', view.category) ? view.category : '';
+  for (const chip of document.querySelectorAll('button[data-filter]')) {
+    chip.setAttribute('aria-pressed', String(chip.dataset.value === state[chip.dataset.filter]));
+  }
+  byId('query').value = view.query || '';
+  filterFood();
+}
+
+window.addEventListener('popstate', event => {
+  const entry = event.state?.foodView ? event.state : null;
+  viewDepth = entry ? entry.depth : 0;
+  updateBackButton();
+  if (foodReady) {
+    applyView(entry ? entry.foodView : emptyView);
+    window.scrollTo(0, 0);
+  }
+});
+byId('back-page').addEventListener('click', () => history.back());
+updateBackButton();
+
+function makeChips(id, field, allLabel, values, palette) {
+  const root = byId(id);
+  for (const value of ['', ...values]) {
+    const node = button(value || allLabel, 'chip', () => setFilter(field, value));
+    node.dataset.filter = field;
+    node.dataset.value = value;
+    node.setAttribute('aria-pressed', String(state[field] === value));
+    styleColor(node, palette, value);
+    if (value && field !== 'quick') {
+      const dot = element('span', 'dot');
+      dot.setAttribute('aria-hidden', 'true');
+      node.prepend(dot);
+    }
+    root.append(node);
+  }
+}
+
+function detailLine(root, label, value) {
+  if (!value) return;
+  const detail = element('dd');
+  detail.append(value);
+  root.append(element('dt', '', label), detail);
+}
+
+function categoryBadge(tag) {
+  const badge = element('span', 'badge badge-category', tag);
+  styleColor(badge, categoryPalette, tag);
+  return badge;
+}
+
+function phoneValue(number) {
+  const dialable = /^[+\d ()-]+$/.test(number) && number.replace(/\D/g, '').length >= 7;
+  if (!dialable) return number;
+  const link = element('a', '', number);
+  link.href = 'tel:' + number.replace(/[^\d+]/g, '');
+  return link;
+}
+
+function storeInfo(item) {
+  const info = element('dl', 'details-grid');
+  detailLine(info, '區域', item.region);
+  if (item.tags.length || item.subtype) {
+    const categories = element('div', 'badges');
+    categories.append(...item.tags.map(categoryBadge));
+    if (item.subtype && !item.tags.includes(item.subtype)) {
+      categories.append(element('span', 'badge-sub', item.subtype));
+    }
+    detailLine(info, '類別', categories);
+  }
+  detailLine(info, '餐食／服務', item.dish);
+  detailLine(info, '推薦', item.picks);
+  detailLine(info, '地址', item.address);
+  detailLine(info, '電話', phoneValue(item.phone));
+  detailLine(info, '營業時間', item.hours);
+  return info;
+}
+
+function cardField(label, value) {
+  const field = element('p', 'card-field');
+  if (value) {
+    if (label) field.append(element('strong', '', label + '：'));
+    field.append(value);
+  }
+  return field;
+}
+
+function createCard(item) {
+  const card = element('article', 'card');
+  card.id = item.id;
+  card.classList.toggle('is-selected', item === selected);
+  styleColor(card, regionPalette, item.region);
+
+  const name = element('h4');
+  name.tabIndex = -1;
+  if (item.point) {
+    const openOnMap = () => {
+      if (desktop.matches) selectPoint(item);
+    };
+    const nameButton = button(item.name, 'desktop-card-title', openOnMap);
+    nameButton.setAttribute('aria-label', '在地圖查看 ' + item.name);
+    name.append(nameButton, element('span', 'mobile-card-title', item.name));
+    card.classList.add('has-point');
+    card.addEventListener('click', event => {
+      if (!event.target.closest('a, button')) openOnMap();
+    });
+  } else {
+    name.textContent = item.name;
+  }
+  const badges = element('div', 'badges');
+  badges.append(element('span', 'badge badge-region', item.region));
+  if (item.island) badges.append(element('span', 'badge badge-island', '離島（' + item.island + '）'));
+  badges.append(...item.tags.map(categoryBadge));
+  if (item.subtype && !item.tags.includes(item.subtype)) badges.append(element('span', 'badge-sub', item.subtype));
+
+  const go = externalLink('', item.mapUrl, 'action primary card-nav');
+  go.append(element('span', 'desktop-nav-text', '導航'), element('span', 'mobile-nav-text', 'Google 地圖 ↗'));
+  go.title = '前往 ' + item.name;
+
+  // 第一行：三欄配置 (店名 │ 類別 │ 導航)
+  const top = element('div', 'card-top card-name-line');
+  top.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto';
+  top.append(name, badges, go);
+  card.append(top);
+
+  // 第二行：雙欄配置 (代表餐食 │ 推薦)
+  if (item.dish || item.picks) {
+    const menu = element('div', 'card-line');
+    menu.append(cardField('代表餐食', item.dish), cardField('推薦', item.picks));
+    card.append(menu);
+  }
+
+  // 第三行：雙欄配置 (電話 │ 營業時間)
+  if (item.phone || item.hours) {
+    const info = element('div', 'card-line');
+    info.append(cardField('電話', phoneValue(item.phone)), cardField('營業時間', item.hours));
+    card.append(info);
+  }
+
+  // 第四行：單欄配置靠左 (地址)
+  if (item.address) {
+    card.append(cardField('地址', item.address));
+  }
+
+  return card;
+}
+
+function groupByRegion(items) {
+  const groups = new Map();
+  for (const item of items) {
+    if (!groups.has(item.region)) groups.set(item.region, []);
+    groups.get(item.region).push(item);
+  }
+  return groups;
+}
+
+function renderResults() {
+  const root = byId('results');
+  const groups = groupByRegion(matches);
+  byId('results-count').textContent = '共 ' + matches.length + ' 筆';
+  root.replaceChildren();
+  root.scrollTop = 0;
+  if (!groups.size) {
+    root.append(element('p', 'empty', '查無符合條件的店家。可以更換鄉市、主類別或搜尋詞。'));
+    return;
+  }
+
+  for (const [region, items] of groups) {
+    const group = element('section', 'group');
+    const title = element('h3', 'group-title');
+    title.id = 'group-' + region;
+    group.setAttribute('aria-labelledby', title.id);
+    title.append(element('span', '', region), element('span', '', items.length + ' 筆'));
+    styleColor(group, regionPalette, region);
+    const cards = element('div', 'cards');
+    let shown = 0;
+    const more = button('', 'action more', () => {
+      const firstNew = items[shown];
+      appendCards(chunkSize);
+      byId(firstNew.id)?.querySelector('h4')?.focus();
+    });
+    more.setAttribute('aria-label', '顯示' + region + '更多店家');
+
+    function appendCards(limit) {
+      const next = items.slice(shown, shown + limit);
+      cards.append(...next.map(createCard));
+      shown += next.length;
+      more.hidden = shown === items.length;
+      more.textContent = '顯示更多' + region + '店家（剩 ' + (items.length - shown) + ' 筆）';
+    }
+
+    appendCards(groups.size === 1 ? chunkSize : 3);
+    group.append(title, cards, more);
+    root.append(group);
+  }
+}
+
+function filterFood() {
+  const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
+  const order = new Map(regionNames.map((region, index) => [region, index]));
+  const preset = quickKeywords.get(state.quick);
+  matches = food.filter(item =>
+    matchesQuickKeyword(item, preset) &&
+    (!state.category || item.tags.includes(state.category)) &&
+    words.every(word => item.search.includes(word))
+  ).sort((a, b) => preset?.anchors ? a.tourismKm - b.tourismKm : order.get(a.region) - order.get(b.region));
+  setSelection(null);
+  renderResults();
+  updateMap();
+}
+
+function setSelection(item) {
+  if (selected) byId(selected.id)?.classList.remove('is-selected');
+  selected = item;
+  if (item) byId(item.id)?.classList.add('is-selected');
+}
+
+function markerContent(item) {
+  const card = element('div', 'popup-card');
+  styleColor(card, regionPalette, item.region);
+  const header = element('div', 'popup-head');
+  const go = externalLink('導航', item.mapUrl, 'popup-go');
+  go.setAttribute('aria-label', '導航到 ' + item.name);
+  header.append(element('h3', '', item.name), go);
+  card.append(header, element('span', 'badge badge-region', item.region + '・美食'), storeInfo(item));
+  return card;
+}
+
+function clusterContent(items) {
+  const content = element('div', 'popup-cluster');
+  const list = element('ul');
+  for (const item of items) {
+    const row = element('li');
+    row.append(button(item.region + '・' + item.name, 'point-button', () => selectPoint(item)));
+    list.append(row);
+  }
+  content.append(element('h3', '', '此處有 ' + items.length + ' 筆店家'), list);
+  return content;
+}
+
+function fitPoints(points, maxZoom) {
+  if (!map || !points.length) return;
+  map.fitBounds(points.map(item => item.point), { maxZoom, padding: [38, 38], animate: false });
+}
+
+function selectPoint(item) {
+  if (!map || !activePoints.includes(item)) return;
+  setSelection(item);
+  map.setView(item.point, Math.max(map.getZoom(), 17), { animate: false });
+  renderMarkers();
+  drawnMarkers.get(item.id)?.openPopup();
+}
+
+function renderMarkers() {
+  if (!map) return;
+  markerLayer.clearLayers();
+  drawnMarkers = new Map();
+  selectedMarker = null;
+  const zoom = map.getZoom();
+  const buckets = new Map();
+  const bucketSize = zoom < 13 ? 34 : 24;
+
+  for (const item of activePoints) {
+    const pixel = map.project(item.point, zoom);
+    const key = Math.floor(pixel.x / bucketSize) + ',' + Math.floor(pixel.y / bucketSize);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(item);
+  }
+
+  for (const points of buckets.values()) {
+    const isActive = points.includes(selected);
+    const item = isActive ? selected : points[0];
+    const isGroup = points.length > 1;
+    const samePlace = points.every(p => p.point[0] === item.point[0] && p.point[1] === item.point[1]);
+    const areas = [...new Set(points.map(point => point.region))];
+    const colors = areas.map(area => (regionPalette.get(area) || defaultColor)[0]);
+    const tone = colors.length === 1 ? colors[0] : 'conic-gradient(' +
+      colors.map((color, i) => color + ' ' + (i / colors.length * 100) + '% ' +
+        ((i + 1) / colors.length * 100) + '%').join(', ') + ')';
+    const markerTitle = isGroup ? areas.join('、') + '｜' + points.length + ' 筆店家' : item.region + '｜' + item.name;
+    const size = isGroup ? (points.length > 9 ? 33 : 27) : (isActive ? 19 : 15);
+    const location = isGroup && !isActive ? [
+      points.reduce((sum, p) => sum + p.point[0], 0) / points.length,
+      points.reduce((sum, p) => sum + p.point[1], 0) / points.length
+    ] : item.point;
+    const marker = L.marker(location, {
+      icon: L.divIcon({
+        className: 'pin-icon' + (isActive ? ' is-active' : ''),
+        html: '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : '') + '</span>',
+        iconSize: [size, size]
+      }),
+      title: isGroup ? markerTitle : '',
+      zIndexOffset: isActive ? 1000 : 0,
+      riseOnHover: true
+    }).addTo(markerLayer);
+
+    const markerEl = marker.getElement();
+    markerEl.setAttribute('role', 'button');
+    markerEl.setAttribute('aria-label', '查看 ' + markerTitle);
+    markerEl.addEventListener('keydown', event => {
+      if (event.key === ' ') {
+        event.preventDefault();
+        marker.fire('click');
+      }
+    });
+
+    const expands = isGroup && !isActive && zoom < (samePlace ? 14 : 18);
+    if (!expands) {
+      const content = !isGroup || isActive ? markerContent(item) : clusterContent(points);
+      marker.bindPopup(content, {
+        className: 'map-popup', minWidth: 250, maxWidth: 315, maxHeight: 310,
+        autoPanPadding: [22, 22]
+      });
+    }
+
+    marker.on('click', () => {
+      if (expands) {
+        fitPoints(points, samePlace ? 14 : Math.min(18, zoom + 2));
+        if (map.getZoom() <= zoom) map.setView(location, zoom + 1, { animate: false });
+        return;
+      }
+      if (!isGroup && zoom < 14) {
+        selectPoint(item);
+        return;
+      }
+      selectedMarker?.getElement()?.classList.remove('is-active');
+      if (!isGroup || isActive) {
+        setSelection(item);
+        markerEl.classList.add('is-active');
+        selectedMarker = marker;
+      } else {
+        setSelection(null);
+        selectedMarker = null;
+      }
+    });
+    for (const point of points) drawnMarkers.set(point.id, marker);
+    if (isActive) selectedMarker = marker;
+  }
+}
+
+function updateZoomFloor() {
+  if (!desktop.matches) return;
+  const size = map.getSize().subtract([overviewPadding * 2, overviewPadding * 2]);
+  if (size.x <= 0 || size.y <= 0) return;
+  const extent = map.project(penghuBounds.getSouthEast(), 0)
+    .subtract(map.project(penghuBounds.getNorthWest(), 0));
+  const scale = Math.min(size.x / extent.x, size.y / extent.y);
+  const zoom = map.getScaleZoom(scale, 0);
+  map.setMinZoom(Math.max(0, Math.floor(zoom / zoomStep) * zoomStep));
+}
+
+function showOverview() {
+  map.fitBounds(penghuBounds, { padding: [overviewPadding, overviewPadding], animate: false });
+}
+
+function initializeMap() {
+  if (map || !desktop.matches || !window.L) return;
+  penghuBounds = L.latLngBounds(penghuExtent);
+  map = L.map('map', {
+    attributionControl: false,
+    scrollWheelZoom: true,
+    maxZoom: 19,
+    zoomSnap: zoomStep,
+    maxBounds: penghuBounds,
+    maxBoundsViscosity: 1
+  }).setView(penghuBounds.getCenter(), 9);
+  updateZoomFloor();
+  showOverview();
+  L.control.scale({ metric: true, imperial: false, maxWidth: 90 }).addTo(map);
+
+  const tiles = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/EPSG:3857/{z}/{y}/{x}.jpg', {
+    maxZoom: 19,
+    noWrap: true
+  });
+  let loadedTiles = 0;
+  tiles.on('loading', () => { loadedTiles = 0; });
+  tiles.on('tileload', () => { loadedTiles += 1; });
+  tiles.on('load', () => { byId('tile-status').hidden = loadedTiles > 0; });
+  tiles.addTo(map);
+
+  markerLayer = L.layerGroup().addTo(map);
+  map.on('zoomend', renderMarkers);
+  map.on('resize', () => {
+    const wasOverview = map.getZoom() <= map.getMinZoom();
+    updateZoomFloor();
+    if (desktop.matches && wasOverview) showOverview();
+  });
+}
+
+function updateMap() {
+  if (!desktop.matches) return;
+  initializeMap();
+  if (!map) return;
+  activePoints = matches.filter(item => item.point && penghuBounds.contains(item.point));
+  const area = state.quick || '全部';
+  byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
+  map.invalidateSize({ pan: false });
+  updateZoomFloor();
+  if (activePoints.length && (state.quick || byId('query').value.trim())) {
+    fitPoints(activePoints, 15);
+  } else {
+    showOverview();
+  }
+  renderMarkers();
+}
+
+byId('query').addEventListener('input', () => {
+  filterFood();
+  saveView(true);
+});
+byId('fit-map').addEventListener('click', () => {
+  if (!map) return;
+  setSelection(null);
+  showOverview();
+  renderMarkers();
+});
+desktop.addEventListener('change', () => {
+  if (desktop.matches) {
+    setSelection(null);
+    if (foodReady) updateMap();
+    else initializeMap();
+  }
+});
+loadFood();
+</script>
+</body>
+</html>
