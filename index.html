@@ -41,9 +41,6 @@
   h1 { margin: 0; font-size: clamp(1.7rem, 3.6vw, 2.55rem); letter-spacing: .045em; line-height: 1.15; }
   .hero-stat { margin: 0; white-space: nowrap; padding: 8px 12px; border: 1px solid #67969f; border-radius: 9px; color: #e5f4f4; font-size: .82rem; }
   .hero-stat strong { color: white; font-size: .94rem; }
-  .hero-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .back-page { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 10px; border: 1px solid #8fbcc2; border-radius: 8px; background: #234a5d; color: white; font-size: .82rem; font-weight: 750; white-space: nowrap; }
-  .back-page:hover { background: #2d5a6f; }
 
   main { padding-block: 16px 38px; }
   .layout { display: grid; gap: 15px; }
@@ -172,7 +169,6 @@
   @media (min-width: 900px) {
     body > .hero, main.wrap { width: 75vw; max-width: none; margin-inline: auto; }
     body > .hero { border-radius: 0 0 12px 12px; }
-    .back-page { display: none; }
     .hero .wrap { max-width: none; padding-inline: clamp(14px, 2vw, 28px); }
     main.wrap { padding-inline: 0; }
     .workspace {
@@ -205,9 +201,6 @@
     .hero-inner { min-height: 89px; gap: 6px; padding-block: 12px; }
     .hero-stat { padding: 6px 7px; font-size: .69rem; }
     .hero-stat strong { font-size: .78rem; }
-    .hero-main { gap: 7px; }
-    .back-page { min-height: 38px; padding: 0 8px; font-size: .76rem; }
-    .hero-main:has(.back-page:not([hidden])) h1 { font-size: min(1.7rem, calc((100vw - 214px) / 6.3)); }
     .eyebrow { font-size: .69rem; }
     .filter-row { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 9px; }
     .filter-label { padding-top: 0; }
@@ -222,11 +215,8 @@
 <a class="skip" href="#content">跳至店家篩選</a>
 <header class="hero" aria-labelledby="page-title">
   <div class="wrap hero-inner">
-    <div class="hero-main">
-      <button class="back-page" type="button" id="back-page" hidden>‹ 上一頁</button>
-      <div>
-        <h1 id="page-title">澎湖美食推薦<h5 class="eyebrow">澎湖五鄉一市</h5></h1>
-      </div>
+    <div>
+      <h1 id="page-title">澎湖美食推薦<h5 class="eyebrow">澎湖五鄉一市</h5></h1>
     </div>
     <p class="hero-stat"><strong id="total-food">–</strong> 筆店家資料</p>
   </div>
@@ -575,18 +565,13 @@ function setFilter(field, value) {
   saveView(false);
 }
 
-// 手機端上一頁：每次切換篩選記一筆瀏覽紀錄，按畫面上的「上一頁」或手機返回鍵先退回前一個篩選畫面，
+// 手機端上一頁：每次切換篩選記一筆瀏覽紀錄，按手機返回鍵先退回前一個篩選畫面，
 // 退到最初畫面後再按，回到進入本頁之前的頁面。
 const emptyView = { quick: '', category: '', query: '' };
-const startedWithHistory = history.length > 1;
 let viewDepth = history.state?.foodView ? history.state.depth : 0;
 try {
   if (!history.state?.foodView) history.replaceState({ foodView: emptyView, depth: 0, typing: false }, '');
 } catch {}
-
-function updateBackButton() {
-  byId('back-page').hidden = !(startedWithHistory || viewDepth > 0);
-}
 
 function saveView(typing) {
   if (desktop.matches) return;
@@ -599,7 +584,6 @@ function saveView(typing) {
       viewDepth += 1;
     }
   } catch {}
-  updateBackButton();
 }
 
 function applyView(view) {
@@ -617,14 +601,12 @@ function applyView(view) {
 window.addEventListener('popstate', event => {
   const entry = event.state?.foodView ? event.state : null;
   viewDepth = entry ? entry.depth : 0;
-  updateBackButton();
   if (foodReady) {
     applyView(entry ? entry.foodView : emptyView);
     window.scrollTo(0, 0);
   }
 });
-byId('back-page').addEventListener('click', () => history.back());
-updateBackButton();
+
 
 function makeChips(id, field, allLabel, values, palette) {
   const root = byId(id);
