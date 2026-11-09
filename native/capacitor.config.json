@@ -1,0 +1,13 @@
+{
+  "appId": "io.github.bearbabybaby_ai.penghufood",
+  "appName": "澎湖美食推薦",
+  "webDir": "www",
+  "server": {
+    "url": "https://bearbabybaby-ai.github.io/penghu-food/",
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "adjustMarginsForEdgeToEdge": "disable"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "penghu-food-native",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@capacitor/android": "7.6.9",
+    "@capacitor/cli": "7.6.9",
+    "@capacitor/core": "7.6.9",
+    "sharp": "0.33.5"
+  }
+}
