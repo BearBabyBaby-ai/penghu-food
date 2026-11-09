@@ -73,13 +73,24 @@ fs.writeFileSync(`${RES}/values-v35/styles.xml`, styles(true));
 
 // 4. 圖示：滿版，整張圖鋪滿圖示可見範圍
 const blurred = (size, k) => sharp(ICON).resize(size, size).blur(Math.max(1, 8 * k)).png().toBuffer();
+const ROUND = 58;   /* 圓形圖示裡圖的大小（dp），可見圓為 72dp */
+const roundFill = async (size, pic, k) => {
+  const pad = Math.floor((size - pic) / 2);
+  const edge = await sharp(ICON).resize(pic, pic).extend({ top: pad, left: pad, bottom: size - pic - pad, right: size - pic - pad, extendWith: 'mirror' }).blur(Math.max(0.6, 1.5 * k)).png().toBuffer();
+  return sharp(edge).composite([{ input: await sharp(ICON).resize(pic, pic).png().toBuffer(), left: pad, top: pad }]).png().toBuffer();
+};
 const DENS = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
 for (const [d, k] of Object.entries(DENS)) {
   const dir = `${RES}/mipmap-${d}`;
   fs.mkdirSync(dir, { recursive: true });
   const legacy = Math.round(48 * k), fg = Math.round(108 * k);
   await sharp(ICON).resize(legacy, legacy).png().toFile(`${dir}/ic_launcher.png`);
-  await sharp(ICON).resize(legacy, legacy).composite([{ input: Buffer.from(`<svg width="${legacy}" height="${legacy}"><circle cx="${legacy / 2}" cy="${legacy / 2}" r="${legacy / 2}"/></svg>`), blend: 'dest-in' }]).png().toFile(`${dir}/ic_launcher_round.png`);
+  // 圓形圖示：圖稍微縮小，讓「澎湖美食」完整落在圓內；四周用圖片邊緣鏡射後模糊補滿
+  const legacyPic = Math.round(legacy * ROUND / 72);
+  await sharp(await roundFill(legacy, legacyPic, k)).composite([{ input: Buffer.from(`<svg width="${legacy}" height="${legacy}"><circle cx="${legacy / 2}" cy="${legacy / 2}" r="${legacy / 2}"/></svg>`), blend: 'dest-in' }]).png().toFile(`${dir}/ic_launcher_round.png`);
+  const roundPic = Math.round(ROUND * k);
+  await sharp(await roundFill(fg, roundPic, k)).png().toFile(`${dir}/ic_launcher_round_bg.png`);
+  await sharp({ create: { width: fg, height: fg, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: await sharp(ICON).resize(roundPic, roundPic).png().toBuffer(), gravity: 'center' }]).png().toFile(`${dir}/ic_launcher_round_foreground.png`);
   const inner = Math.round(72 * k);   /* 72dp＝圖示可見範圍，圖鋪滿 */
   const pic = await sharp(ICON).resize(inner, inner).png().toBuffer();
   await sharp({ create: { width: fg, height: fg, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: pic, gravity: 'center' }]).png().toFile(`${dir}/ic_launcher_foreground.png`);
@@ -95,7 +106,13 @@ const adaptive = `<?xml version="1.0" encoding="utf-8"?>
 </adaptive-icon>
 `;
 fs.writeFileSync(`${RES}/mipmap-anydpi-v26/ic_launcher.xml`, adaptive);
-fs.writeFileSync(`${RES}/mipmap-anydpi-v26/ic_launcher_round.xml`, adaptive);
+// 手機用圓形圖示時（系統會改用 roundIcon），用縮小版讓「澎湖美食」完整顯示
+fs.writeFileSync(`${RES}/mipmap-anydpi-v26/ic_launcher_round.xml`, `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_round_bg"/>
+    <foreground android:drawable="@mipmap/ic_launcher_round_foreground"/>
+</adaptive-icon>
+`);
 
 // 5. 啟動畫面：頁面底色＋圖示
 for (const dir of fs.readdirSync(RES).filter(n => n.startsWith('drawable'))) {
