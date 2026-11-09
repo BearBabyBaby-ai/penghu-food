@@ -5,13 +5,12 @@ import sharp from 'sharp';
 
 const A = 'android/app';
 const RES = `${A}/src/main/res`;
-const ICON = '../icons/app-icon.png';
-const VERSION_CODE = 1;
-const VERSION_NAME = '1.0.0';
+const ICON = 'icon.png';
+const VERSION_CODE = 2;
+const VERSION_NAME = '1.0.1';
 const BAR = '#19394a';
 const PAGE = '#f2f6f7';
-const ICON_TOP = '#8fdcae';
-const ICON_BOTTOM = '#3aab85';
+const ICON_EDGE = '#1d9fd0';
 
 const edit = (file, fn) => { const s = fs.readFileSync(file, 'utf8'); const t = fn(s); if (t === s) throw new Error(`未修改：${file}`); fs.writeFileSync(file, t); };
 
@@ -72,23 +71,22 @@ fs.writeFileSync(`${RES}/values/styles.xml`, styles(false));
 fs.mkdirSync(`${RES}/values-v35`, { recursive: true });
 fs.writeFileSync(`${RES}/values-v35/styles.xml`, styles(true));
 
-// 4. 圖示：整張圖完整顯示，不裁切；底色延續圖示本身的綠色漸層
-const gradient = (size) => Buffer.from(`<svg width="${size}" height="${size}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${ICON_TOP}"/><stop offset="1" stop-color="${ICON_BOTTOM}"/></linearGradient></defs><rect width="${size}" height="${size}" fill="url(#g)"/></svg>`);
+// 4. 圖示：滿版，整張圖鋪滿圖示可見範圍
+const blurred = (size, k) => sharp(ICON).resize(size, size).blur(Math.max(1, 8 * k)).png().toBuffer();
 const DENS = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
 for (const [d, k] of Object.entries(DENS)) {
   const dir = `${RES}/mipmap-${d}`;
   fs.mkdirSync(dir, { recursive: true });
   const legacy = Math.round(48 * k), fg = Math.round(108 * k);
   await sharp(ICON).resize(legacy, legacy).png().toFile(`${dir}/ic_launcher.png`);
-  const roundPic = await sharp(ICON).resize(Math.round(legacy * 0.86), Math.round(legacy * 0.86)).png().toBuffer();
-  await sharp(gradient(legacy)).composite([{ input: roundPic, gravity: 'center' }, { input: Buffer.from(`<svg width="${legacy}" height="${legacy}"><circle cx="${legacy / 2}" cy="${legacy / 2}" r="${legacy / 2}"/></svg>`), blend: 'dest-in' }]).png().toFile(`${dir}/ic_launcher_round.png`);
-  const inner = Math.round(72 * k);
+  await sharp(ICON).resize(legacy, legacy).composite([{ input: Buffer.from(`<svg width="${legacy}" height="${legacy}"><circle cx="${legacy / 2}" cy="${legacy / 2}" r="${legacy / 2}"/></svg>`), blend: 'dest-in' }]).png().toFile(`${dir}/ic_launcher_round.png`);
+  const inner = Math.round(72 * k);   /* 72dp＝圖示可見範圍，圖鋪滿 */
   const pic = await sharp(ICON).resize(inner, inner).png().toBuffer();
   await sharp({ create: { width: fg, height: fg, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: pic, gravity: 'center' }]).png().toFile(`${dir}/ic_launcher_foreground.png`);
-  await sharp(gradient(fg)).png().toFile(`${dir}/ic_launcher_bg.png`);
+  await sharp(await blurred(fg, k)).png().toFile(`${dir}/ic_launcher_bg.png`);
 }
 fs.rmSync(`${RES}/drawable-v24/ic_launcher_foreground.xml`, { force: true });
-fs.writeFileSync(`${RES}/drawable/ic_launcher_background.xml`, `<?xml version="1.0" encoding="utf-8"?>\n<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="${ICON_BOTTOM}"/></shape>\n`);
+fs.writeFileSync(`${RES}/drawable/ic_launcher_background.xml`, `<?xml version="1.0" encoding="utf-8"?>\n<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="${ICON_EDGE}"/></shape>\n`);
 fs.rmSync(`${RES}/values/ic_launcher_background.xml`, { force: true });
 const adaptive = `<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">

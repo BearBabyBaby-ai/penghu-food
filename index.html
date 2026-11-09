@@ -201,6 +201,17 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     .map-panel { display: none; }
     .action, .card-top .card-nav { min-height: 42px; }
     .chip { min-height: 38px; }
+    /* 手機端資訊卡片：店名／類別／推薦／營業時間／電話／地址各一行，點卡片即導航 */
+    .card { display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
+    .card-top, .card-line { display: contents; }
+    .card .card-nav, .card .field-dish, .card .card-field:empty { display: none; }
+    .card h4 { order: 1; }
+    .card .badges { order: 2; }
+    .card .field-picks { order: 3; }
+    .card .field-hours { order: 4; }
+    .card .field-phone { order: 5; }
+    .card .field-address { order: 6; }
+    .card-line > :nth-child(2):not(:empty) { border-inline-start: 0; padding-inline-start: 0; }
   }
   @media (max-width: 620px) {
     .hero-inner { min-height: 89px; gap: 6px; padding-block: 12px; }
@@ -670,8 +681,8 @@ function storeInfo(item) {
   return info;
 }
 
-function cardField(label, value) {
-  const field = element('p', 'card-field');
+function cardField(label, value, kind) {
+  const field = element('p', 'card-field' + (kind ? ' field-' + kind : ''));
   if (value) {
     if (label) field.append(element('strong', '', label + '：'));
     field.append(value);
@@ -695,12 +706,21 @@ function createCard(item) {
     nameButton.setAttribute('aria-label', '在地圖查看 ' + item.name);
     name.append(nameButton, element('span', 'mobile-card-title', item.name));
     card.classList.add('has-point');
-    card.addEventListener('click', event => {
-      if (!event.target.closest('a, button')) openOnMap();
-    });
   } else {
     name.textContent = item.name;
   }
+  // 電腦端點卡片在地圖上顯示；手機端點卡片直接導航
+  card.addEventListener('click', event => {
+    if (event.target.closest('a, button')) return;
+    if (desktop.matches) {
+      if (item.point) selectPoint(item);
+    } else {
+      const link = externalLink('', item.mapUrl);
+      document.body.append(link);
+      link.click();
+      link.remove();
+    }
+  });
   const badges = element('div', 'badges');
   badges.append(element('span', 'badge badge-region', item.region));
   if (item.island) badges.append(element('span', 'badge badge-island', '離島（' + item.island + '）'));
@@ -720,20 +740,20 @@ function createCard(item) {
   // 第二行：雙欄配置 (代表餐食 │ 推薦)
   if (item.dish || item.picks) {
     const menu = element('div', 'card-line');
-    menu.append(cardField('代表餐食', item.dish), cardField('推薦', item.picks));
+    menu.append(cardField('代表餐食', item.dish, 'dish'), cardField('推薦', item.picks, 'picks'));
     card.append(menu);
   }
 
   // 第三行：雙欄配置 (電話 │ 營業時間)
   if (item.phone || item.hours) {
     const info = element('div', 'card-line');
-    info.append(cardField('電話', phoneValue(item.phone)), cardField('營業時間', item.hours));
+    info.append(cardField('電話', phoneValue(item.phone), 'phone'), cardField('營業時間', item.hours, 'hours'));
     card.append(info);
   }
 
   // 第四行：單欄配置靠左 (地址)
   if (item.address) {
-    card.append(cardField('地址', item.address));
+    card.append(cardField('地址', item.address, 'address'));
   }
 
   return card;
