@@ -8,6 +8,10 @@
 <title>澎湖美食推薦</title>
 <link rel="icon" type="image/png" href="icons/app-icon.png">
 <link rel="apple-touch-icon" href="icons/app-icon.png">
+<script>
+// 嵌入模式（被其他網頁以 iframe 框住）時隱藏頂部 banner
+if (window.self !== window.top) document.documentElement.classList.add('embedded');
+</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" />
 <style>
   :root {
@@ -41,6 +45,7 @@
   h1 { margin: 0; font-size: clamp(1.7rem, 3.6vw, 2.55rem); letter-spacing: .045em; line-height: 1.15; }
   .hero-stat { margin: 0; white-space: nowrap; padding: 8px 12px; border: 1px solid #67969f; border-radius: 9px; color: #e5f4f4; font-size: .82rem; }
   .hero-stat strong { color: white; font-size: .94rem; }
+  .embedded .hero { display: none; }
 
   main { padding-block: 16px 38px; }
   .layout { display: grid; gap: 15px; }
