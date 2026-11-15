@@ -406,6 +406,8 @@ const editAccess = {
   endpoint: 'https://script.google.com/macros/s/AKfycbzPUTkOITQJfSksfjFS91nCCBadZQIsTEQtm7XmExZcJYSm0FB6eo0NB-BAfCH3wjINEA/exec'
 };
 let editor = null;
+// 已按過「顯示更多」的區域：點選卡片重新排序時維持展開，換篩選條件才收回
+const expandedRegions = new Set();
 // 電腦端登入後可切換修改的資料類別
 const datasets = new Map([
   ['food', '美食'], ['spot', '景點'], ['temple', '廟宇'], ['store', '其他店家'],
@@ -876,6 +878,7 @@ function renderResults() {
     let shown = 0;
     const more = button('', 'action more', () => {
       const firstNew = items[shown];
+      expandedRegions.add(region);
       appendCards(items.length);
       byId(firstNew.id)?.querySelector('h4')?.focus();
     });
@@ -889,7 +892,7 @@ function renderResults() {
       more.textContent = '顯示更多' + region + '店家（剩 ' + (items.length - shown) + ' 筆）';
     }
 
-    appendCards(groups.size === 1 ? chunkSize : 3);
+    appendCards(expandedRegions.has(region) ? items.length : (groups.size === 1 ? chunkSize : 3));
     group.append(title, cards, more);
     root.append(group);
   }
@@ -905,6 +908,7 @@ function filterFood() {
     words.every(word => item.search.includes(word))
   ).sort((a, b) => preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99));
   setSelection(null);
+  expandedRegions.clear();
   renderResults();
   updateMap();
 }
