@@ -119,6 +119,8 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .popup-card .details-grid dd .badge { margin: 0 4px 2px 0; }
   .popup-card .popup-go { display: inline-flex; align-items: center; min-height: 28px; padding: 0 8px; border-radius: 6px; background: #2468a5; color: white; text-decoration: none; white-space: nowrap; font-size: .78rem; font-weight: 750; }
   .popup-card .popup-go:hover { background: #21598f; }
+  .popup-card .popup-edit { border: 1px solid #2468a5; background: white; color: #2468a5; }
+  .popup-card .popup-edit:hover { background: #eef6f9; }
   .popup-cluster h3 { margin: 0 9px 5px 0; font-size: .91rem; }
   .popup-cluster ul { list-style: none; margin: 0; padding: 0; }
   .popup-cluster li + li { border-top: 1px solid var(--line); }
@@ -208,7 +210,8 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     .workspace .cards { grid-template-columns: minmax(0, 1fr); }
     .map-head { flex: none; }
     .map-frame { flex: 1; height: auto; min-height: 0; }
-    .card.has-point { cursor: pointer; }
+    .card { cursor: pointer; }
+    .card:not(.is-selected) > :not(.card-top) { display: none; }
     .card.has-point:hover { border-color: var(--c-accent, var(--tone)); box-shadow: 0 3px 10px rgba(0,0,0,.08); }
     .desktop-card-title { display: inline; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; }
     .desktop-card-title:hover { filter: brightness(0.85); }
@@ -759,7 +762,7 @@ function createCard(item) {
   name.tabIndex = -1;
   if (item.point) {
     const openOnMap = () => {
-      if (desktop.matches) selectPoint(item);
+      if (desktop.matches) chooseItem(item);
     };
     const nameButton = button(item.name, 'desktop-card-title', openOnMap);
     nameButton.setAttribute('aria-label', '在地圖查看 ' + item.name);
@@ -772,7 +775,7 @@ function createCard(item) {
   card.addEventListener('click', event => {
     if (event.target.closest('a, button')) return;
     if (desktop.matches) {
-      if (item.point) selectPoint(item);
+      chooseItem(item);
     } else {
       const link = externalLink('', item.mapUrl);
       document.body.append(link);
@@ -839,7 +842,8 @@ function groupByRegion(items) {
 
 function renderResults() {
   const root = byId('results');
-  const groups = groupByRegion(matches);
+  const focused = desktop.matches && selected && matches.includes(selected);
+  const groups = groupByRegion(focused ? [selected, ...matches.filter(item => item !== selected)] : matches);
   byId('results-count').textContent = '共 ' + matches.length + ' 筆';
   root.replaceChildren();
   root.scrollTop = 0;
@@ -905,6 +909,15 @@ function markerContent(item) {
   const go = externalLink('導航', item.mapUrl, 'popup-go');
   go.setAttribute('aria-label', '導航到 ' + item.name);
   header.append(element('h3', '', item.name), go);
+  if (editor) {
+    header.style.gridTemplateColumns = 'minmax(0, 1fr) auto auto';
+    const edit = button('修改', 'popup-go popup-edit', () => {
+      map.closePopup();
+      openEditor(item);
+    });
+    edit.setAttribute('aria-label', '修改 ' + item.name);
+    header.append(edit);
+  }
   card.append(header, element('span', 'badge badge-region', item.region + '・美食'), storeInfo(item));
   return card;
 }
@@ -926,9 +939,24 @@ function fitPoints(points, maxZoom) {
   map.fitBounds(points.map(item => item.point), { maxZoom, padding: [38, 38], animate: false });
 }
 
+// 電腦端：選取的店家排到清單第一順位並展開；再點一次已選取的店家就收合
+function chooseItem(item) {
+  if (item === selected) {
+    setSelection(null);
+    map?.closePopup();
+    return;
+  }
+  if (map && activePoints.includes(item)) selectPoint(item);
+  else {
+    setSelection(item);
+    renderResults();
+  }
+}
+
 function selectPoint(item) {
   if (!map || !activePoints.includes(item)) return;
   setSelection(item);
+  renderResults();
   map.setView(item.point, 21, { animate: false });
   renderMarkers();
   drawnMarkers.get(item.id)?.openPopup();
@@ -1009,6 +1037,7 @@ function renderMarkers() {
       selectedMarker?.getElement()?.classList.remove('is-active');
       if (!isGroup || isActive) {
         setSelection(item);
+        renderResults();
         markerEl.classList.add('is-active');
         selectedMarker = marker;
       } else {
@@ -1116,6 +1145,7 @@ function setEditor(next) {
   } catch {}
   byId('login').textContent = next ? '登出（' + next.email + '）' : '登入';
   if (foodReady) renderResults();
+  if (map) renderMarkers();
 }
 
 function editorValid() {
