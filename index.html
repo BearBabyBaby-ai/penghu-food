@@ -40,12 +40,31 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .skip:focus { transform: none; }
 
   .hero { background: var(--navy); color: white; border-bottom: 4px solid #77b9bd; }
-  .hero-inner { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 112px; padding-block: 17px; }
-  .eyebrow { margin: 0 0 6px; color: #b9e1e0; font-size: .79rem; font-weight: 700; letter-spacing: .13em; }
-  h1 { margin: 0; font-size: clamp(1.7rem, 3.6vw, 2.55rem); letter-spacing: .045em; line-height: 1.15; }
-  .hero-stat { margin: 0; white-space: nowrap; padding: 8px 12px; border: 1px solid #67969f; border-radius: 9px; color: #e5f4f4; font-size: .82rem; }
+  .hero-inner { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 64px; padding-block: 8px; }
+  .eyebrow { margin: 2px 0 0; color: #b9e1e0; font-size: .74rem; font-weight: 700; letter-spacing: .13em; }
+  h1 { margin: 0; font-size: clamp(1.3rem, 2.4vw, 1.75rem); letter-spacing: .045em; line-height: 1.15; }
+  .hero-stat { margin: 0; white-space: nowrap; padding: 5px 10px; border: 1px solid #67969f; border-radius: 9px; color: #e5f4f4; font-size: .82rem; }
   .hero-stat strong { color: white; font-size: .94rem; }
   .embedded .hero { display: none; }
+  .hero-side { display: flex; align-items: center; gap: 8px; }
+  .login-btn { min-height: 32px; padding: 0 10px; border: 1px solid #67969f; border-radius: 8px; background: transparent; color: #e5f4f4; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+  .login-btn:hover { background: #234a5d; }
+  .card .field-url a { word-break: break-all; font-size: .74rem; }
+  .card-edit { min-height: 30px; }
+  .editor { width: min(760px, 94vw); max-height: 94vh; padding: 0; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: var(--paper); }
+  .editor::backdrop { background: #0f2633a6; }
+  .editor-body { display: grid; gap: 9px; padding: 14px 16px 16px; }
+  .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .editor-head h2 { font-size: 1.08rem; overflow-wrap: anywhere; }
+  .editor-map { height: min(52vh, 440px); border: 1px solid #b8d2de; border-radius: 10px; background: #c7ddf0; }
+  .editor-hint, .editor-coords, .editor-status { margin: 0; color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .editor-status.is-error { color: #a1342a; font-weight: 700; }
+  .editor-url { display: grid; gap: 4px; font-size: .82rem; font-weight: 750; }
+  .editor-url input { min-height: 36px; padding: 0 9px; border: 1px solid #a9bbc5; border-radius: 8px; font-size: .8rem; }
+  .editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .login-dialog { width: min(360px, 92vw); padding: 0; border: 1px solid var(--line); border-radius: 14px; }
+  .login-dialog::backdrop { background: #0f2633a6; }
+  #gsi-button { min-height: 44px; display: flex; justify-content: center; }
 
   main { padding-block: 16px 38px; }
   .layout { display: grid; gap: 15px; }
@@ -204,7 +223,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     /* 手機端資訊卡片：店名／類別／推薦／營業時間／電話／地址各一行，點卡片即導航 */
     .card { display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
     .card-top, .card-line { display: contents; }
-    .card .card-nav, .card .field-dish, .card .card-field:empty { display: none; }
+    .card .card-nav, .card .field-dish, .card .card-field:empty, .card .field-url, .card .card-edit, .login-btn { display: none; }
     .card h4 { order: 1; }
     .card .badges { order: 2; }
     .card .field-picks { order: 3; }
@@ -214,10 +233,10 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     .card-line > :nth-child(2):not(:empty) { border-inline-start: 0; padding-inline-start: 0; }
   }
   @media (max-width: 620px) {
-    .hero-inner { min-height: 89px; gap: 6px; padding-block: 12px; }
+    .hero-inner { min-height: 52px; gap: 6px; padding-block: 7px; }
     .hero-stat { padding: 6px 7px; font-size: .69rem; }
     .hero-stat strong { font-size: .78rem; }
-    .eyebrow { font-size: .69rem; }
+    .eyebrow { font-size: .66rem; }
     .filter-row { grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 9px; }
     .filter-label { padding-top: 0; }
     .cards { grid-template-columns: minmax(0, 1fr); }
@@ -234,7 +253,10 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     <div>
       <h1 id="page-title">澎湖美食推薦<h5 class="eyebrow">澎湖五鄉一市</h5></h1>
     </div>
-    <p class="hero-stat"><strong id="total-food">–</strong> 筆店家資料</p>
+    <div class="hero-side">
+      <p class="hero-stat"><strong id="total-food">–</strong> 筆店家資料</p>
+      <button class="login-btn" type="button" id="login">登入</button>
+    </div>
   </div>
 </header>
 <main class="wrap" id="content" tabindex="-1">
@@ -288,6 +310,37 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   </div>
 </main>
 
+<dialog class="login-dialog" id="login-dialog" aria-labelledby="login-title">
+  <div class="editor-body">
+    <div class="editor-head">
+      <h2 id="login-title">登入以修改資料</h2>
+      <button class="action" type="button" data-close>關閉</button>
+    </div>
+    <div id="gsi-button"></div>
+    <p class="editor-status" id="login-status" role="status"></p>
+  </div>
+</dialog>
+
+<dialog class="editor" id="editor" aria-labelledby="editor-title">
+  <div class="editor-body">
+    <div class="editor-head">
+      <h2 id="editor-title">修改位置</h2>
+      <button class="action" type="button" data-close>關閉</button>
+    </div>
+    <div class="editor-map" id="editor-map"></div>
+    <p class="editor-hint">拖曳圖釘，或直接點地圖，調整店家位置。</p>
+    <p class="editor-coords" id="editor-coords"></p>
+    <label class="editor-url">完整網址
+      <input id="editor-url" type="url" inputmode="url" spellcheck="false">
+    </label>
+    <p class="editor-status" id="editor-status" role="status"></p>
+    <div class="editor-actions">
+      <button class="action" type="button" data-close>取消</button>
+      <button class="action primary" type="button" id="editor-save" style="--c-accent:#2468a5">儲存並寫回</button>
+    </div>
+  </div>
+</dialog>
+
 <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"></script>
 <script>
 'use strict';
@@ -340,6 +393,12 @@ const categoryPalette = new Map([
 ]);
 const defaultColor = ['#425e71', '#ebf0f3'];
 const chunkSize = 24;
+// 電腦端修改功能：Google 登入用戶端 ID、寫回後台網址（可修改的帳號由後台核對）
+const editAccess = {
+  clientId: '',
+  endpoint: ''
+};
+let editor = null;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -527,7 +586,7 @@ function mapFoodRows(rows, references) {
     const tourismKm = locationPoint(point) ? Math.min(...cityTourism.anchors.map(anchor => distanceKm(point, anchor))) : Infinity;
     return [{
       id: 'food-' + index, region, tags: splitCategories(main), subtype, name, dish, picks, phone,
-      address, hours, point, mapUrl, location, island, tourismKm,
+      address, hours, point, mapUrl, sheetUrl: url, location, island, tourismKm,
       search: searchable([region, main, subtype, name, dish, picks, address].join(' '))
     }];
   });
@@ -733,8 +792,13 @@ function createCard(item) {
 
   // 第一行：三欄配置 (店名 │ 類別 │ 導航)
   const top = element('div', 'card-top card-name-line');
-  top.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto';
+  top.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto' + (editor ? ' auto' : '');
   top.append(name, badges, go);
+  if (editor) {
+    const edit = button('修改', 'action card-edit', () => openEditor(item));
+    edit.setAttribute('aria-label', '修改 ' + item.name);
+    top.append(edit);
+  }
   card.append(top);
 
   // 第二行：雙欄配置 (代表餐食 │ 推薦)
@@ -754,6 +818,11 @@ function createCard(item) {
   // 第四行：單欄配置靠左 (地址)
   if (item.address) {
     card.append(cardField('地址', item.address, 'address'));
+  }
+
+  // 第五行：完整網址（電腦端）
+  if (item.sheetUrl) {
+    card.append(cardField('完整網址', webUrl(item.sheetUrl) ? externalLink(item.sheetUrl, item.sheetUrl) : item.sheetUrl, 'url'));
   }
 
   return card;
@@ -790,7 +859,7 @@ function renderResults() {
     let shown = 0;
     const more = button('', 'action more', () => {
       const firstNew = items[shown];
-      appendCards(chunkSize);
+      appendCards(items.length);
       byId(firstNew.id)?.querySelector('h4')?.focus();
     });
     more.setAttribute('aria-label', '顯示' + region + '更多店家');
@@ -1017,6 +1086,199 @@ function updateMap() {
   }
   renderMarkers();
 }
+
+
+// ===== 電腦端：登入與修改（位置、完整網址寫回原始資料） =====
+function decodeToken(token) {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(decodeURIComponent(escape(atob(part))));
+  } catch {
+    return null;
+  }
+}
+
+async function callBackend(body) {
+  const response = await fetch(editAccess.endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  return response.json();
+}
+
+function setEditor(next) {
+  editor = next;
+  try {
+    if (next) sessionStorage.setItem('penghuFoodEditor', JSON.stringify(next));
+    else sessionStorage.removeItem('penghuFoodEditor');
+  } catch {}
+  byId('login').textContent = next ? '登出（' + next.email + '）' : '登入';
+  if (foodReady) renderResults();
+}
+
+function editorValid() {
+  return editor && editor.exp * 1000 > Date.now() + 60000;
+}
+
+function loadGoogleSignIn() {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('無法載入 Google 登入'));
+    document.head.append(script);
+  });
+}
+
+async function handleCredential(response) {
+  const status = byId('login-status');
+  status.classList.remove('is-error');
+  status.textContent = '確認帳號中…';
+  const payload = decodeToken(response.credential);
+  try {
+    const result = await callBackend({ action: 'check', idToken: response.credential });
+    if (!result.ok) throw new Error(result.error || '此帳號沒有修改權限');
+    setEditor({ token: response.credential, email: result.email || payload?.email || '', exp: payload?.exp || 0 });
+    byId('login-dialog').close();
+  } catch (error) {
+    status.classList.add('is-error');
+    status.textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
+  }
+}
+
+async function openLogin() {
+  const dialog = byId('login-dialog');
+  const status = byId('login-status');
+  status.classList.remove('is-error');
+  status.textContent = '';
+  dialog.showModal();
+  if (!editAccess.clientId || !editAccess.endpoint) {
+    status.classList.add('is-error');
+    status.textContent = '修改功能尚未設定完成。';
+    return;
+  }
+  try {
+    await loadGoogleSignIn();
+    google.accounts.id.initialize({ client_id: editAccess.clientId, callback: handleCredential, ux_mode: 'popup' });
+    byId('gsi-button').replaceChildren();
+    google.accounts.id.renderButton(byId('gsi-button'), { theme: 'outline', size: 'large', text: 'signin_with', locale: 'zh-TW' });
+  } catch (error) {
+    status.classList.add('is-error');
+    status.textContent = error.message;
+  }
+}
+
+byId('login').addEventListener('click', () => {
+  if (editor) {
+    window.google?.accounts?.id?.disableAutoSelect();
+    setEditor(null);
+  } else {
+    openLogin();
+  }
+});
+for (const dialog of document.querySelectorAll('dialog')) {
+  dialog.addEventListener('click', event => {
+    if (event.target.closest('[data-close]')) dialog.close();
+  });
+}
+try {
+  const saved = JSON.parse(sessionStorage.getItem('penghuFoodEditor') || 'null');
+  if (saved && saved.exp * 1000 > Date.now() + 60000) setEditor(saved);
+} catch {}
+
+// 依原本網址決定縮放：原本有 21z 就用 21z，沒有就用 60m（衛星）
+function fullUrlFor(lat, lng, original) {
+  const pair = lat.toFixed(7) + ',' + lng.toFixed(7);
+  const view = /,21z\b/.test(original || '') ? '21z' : '60m/data=!3m1!1e3';
+  return 'https://www.google.com/maps/search/' + pair + '/@' + pair + ',' + view;
+}
+
+let editMap;
+let editMarker;
+let editItem = null;
+
+function showEditPoint(latlng, regenerate) {
+  const lat = Number(latlng.lat.toFixed(7));
+  const lng = Number(latlng.lng.toFixed(7));
+  editMarker.setLatLng([lat, lng]);
+  byId('editor-coords').textContent = '緯度 ' + lat.toFixed(7) + '　經度 ' + lng.toFixed(7);
+  if (regenerate) byId('editor-url').value = fullUrlFor(lat, lng, editItem.sheetUrl);
+}
+
+function openEditor(item) {
+  if (!editorValid()) {
+    setEditor(null);
+    openLogin();
+    byId('login-status').textContent = '登入已過期，請重新登入。';
+    return;
+  }
+  editItem = item;
+  const dialog = byId('editor');
+  byId('editor-title').textContent = '修改：' + item.name;
+  byId('editor-status').textContent = '';
+  byId('editor-status').classList.remove('is-error');
+  byId('editor-url').value = item.sheetUrl || '';
+  byId('editor-save').disabled = false;
+  dialog.showModal();
+  const start = item.point || penghuBounds.getCenter();
+  if (!editMap) {
+    editMap = L.map('editor-map', { attributionControl: false, maxZoom: 21, zoomSnap: 1, maxBounds: L.latLngBounds(penghuExtent), maxBoundsViscosity: 1 });
+    L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/EPSG:3857/{z}/{y}/{x}.jpg', { maxNativeZoom: 19, maxZoom: 21, noWrap: true }).addTo(editMap);
+    L.control.scale({ metric: true, imperial: false, maxWidth: 90 }).addTo(editMap);
+    editMarker = L.marker(start, { draggable: true, autoPan: true }).addTo(editMap);
+    editMarker.on('dragend', () => showEditPoint(editMarker.getLatLng(), true));
+    editMap.on('click', event => showEditPoint(event.latlng, true));
+  }
+  editMap.invalidateSize({ pan: false });
+  editMap.setView(start, item.point ? 21 : 13, { animate: false });
+  showEditPoint(L.latLng(start), false);
+}
+
+byId('editor-save').addEventListener('click', async () => {
+  const item = editItem;
+  const status = byId('editor-status');
+  const url = byId('editor-url').value.trim();
+  const { lat, lng } = editMarker.getLatLng();
+  status.classList.remove('is-error');
+  if (!webUrl(url)) {
+    status.classList.add('is-error');
+    status.textContent = '完整網址格式不正確。';
+    return;
+  }
+  if (!editorValid()) {
+    status.classList.add('is-error');
+    status.textContent = '登入已過期，請關閉後重新登入。';
+    return;
+  }
+  byId('editor-save').disabled = true;
+  status.textContent = '寫回中…';
+  try {
+    const result = await callBackend({
+      action: 'save', idToken: editor.token,
+      name: item.name, address: item.address,
+      oldLat: item.point ? item.point[0] : '', oldLng: item.point ? item.point[1] : '', oldUrl: item.sheetUrl || '',
+      lat: Number(lat.toFixed(7)), lng: Number(lng.toFixed(7)), url
+    });
+    if (!result.ok) throw new Error(result.error || '寫回失敗');
+    item.point = [Number(lat.toFixed(7)), Number(lng.toFixed(7))];
+    item.sheetUrl = url;
+    item.mapUrl = url;
+    item.tourismKm = Math.min(...cityTourism.anchors.map(anchor => distanceKm(item.point, anchor)));
+    byId('editor').close();
+    renderResults();
+    if (map) {
+      activePoints = matches.filter(entry => entry.point && penghuBounds.contains(entry.point));
+      renderMarkers();
+    }
+  } catch (error) {
+    status.classList.add('is-error');
+    status.textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
+    byId('editor-save').disabled = false;
+  }
+});
 
 byId('query').addEventListener('input', () => {
   filterFood();
