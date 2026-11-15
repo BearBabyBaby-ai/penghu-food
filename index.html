@@ -929,7 +929,7 @@ function fitPoints(points, maxZoom) {
 function selectPoint(item) {
   if (!map || !activePoints.includes(item)) return;
   setSelection(item);
-  map.setView(item.point, Math.max(map.getZoom(), 17), { animate: false });
+  map.setView(item.point, 21, { animate: false });
   renderMarkers();
   drawnMarkers.get(item.id)?.openPopup();
 }
@@ -1042,7 +1042,7 @@ function initializeMap() {
   map = L.map('map', {
     attributionControl: false,
     scrollWheelZoom: true,
-    maxZoom: 19,
+    maxZoom: 21,
     zoomSnap: zoomStep,
     maxBounds: penghuBounds,
     maxBoundsViscosity: 1
@@ -1052,7 +1052,8 @@ function initializeMap() {
   L.control.scale({ metric: true, imperial: false, maxWidth: 90 }).addTo(map);
 
   const tiles = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/EPSG:3857/{z}/{y}/{x}.jpg', {
-    maxZoom: 19,
+    maxNativeZoom: 19,
+    maxZoom: 21,
     noWrap: true
   });
   let loadedTiles = 0;
