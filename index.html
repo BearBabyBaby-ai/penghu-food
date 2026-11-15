@@ -226,7 +226,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     /* 手機端資訊卡片：店名／類別／推薦／營業時間／電話／地址各一行，點卡片即導航 */
     .card { display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
     .card-top, .card-line { display: contents; }
-    .card .card-nav, .card .field-dish, .card .card-field:empty, .card .field-url, .card .card-edit, .login-btn { display: none; }
+    .card .card-nav, .card .field-dish, .card .card-field:empty, .card .field-url, .card .card-edit, .login-btn, .dataset-row { display: none !important; }
     .card h4 { order: 1; }
     .card .badges { order: 2; }
     .card .field-picks { order: 3; }
@@ -271,9 +271,13 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
         <div class="chips quick-chips" id="quick-keywords" role="group" aria-labelledby="quick-label"></div>
       </div>
       <p class="quick-status" id="quick-status" role="status" hidden></p>
-      <div class="filter-row">
+      <div class="filter-row" id="category-row">
         <p class="filter-label" id="categories-label">主類別</p>
         <div class="chips category-chips" id="categories" role="group" aria-labelledby="categories-label"></div>
+      </div>
+      <div class="filter-row dataset-row" id="dataset-row" hidden>
+        <p class="filter-label" id="dataset-label">修改資料</p>
+        <div class="chips quick-chips" id="datasets" role="group" aria-labelledby="dataset-label"></div>
       </div>
     </section>
 
@@ -402,6 +406,14 @@ const editAccess = {
   endpoint: 'https://script.google.com/macros/s/AKfycbzPUTkOITQJfSksfjFS91nCCBadZQIsTEQtm7XmExZcJYSm0FB6eo0NB-BAfCH3wjINEA/exec'
 };
 let editor = null;
+// 電腦端登入後可切換修改的資料類別
+const datasets = new Map([
+  ['food', '美食'], ['spot', '景點'], ['temple', '廟宇'], ['store', '其他店家'],
+  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線']
+]);
+let dataset = 'food';
+const datasetCache = new Map();
+const datasetLabel = key => datasets.get(key || 'food') || '美食';
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -796,7 +808,8 @@ function createCard(item) {
   // 第一行：三欄配置 (店名 │ 類別 │ 導航)
   const top = element('div', 'card-top card-name-line');
   top.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto' + (editor ? ' auto' : '');
-  top.append(name, badges, go);
+  top.append(name, badges);
+  if (item.mapUrl) top.append(go);
   if (editor) {
     const edit = button('修改', 'action card-edit', () => openEditor(item));
     edit.setAttribute('aria-label', '修改 ' + item.name);
@@ -886,11 +899,11 @@ function filterFood() {
   const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
   const order = new Map(regionNames.map((region, index) => [region, index]));
   const preset = quickKeywords.get(state.quick);
-  matches = food.filter(item =>
+  matches = currentItems().filter(item =>
     matchesQuickKeyword(item, preset) &&
     (!state.category || item.tags.includes(state.category)) &&
     words.every(word => item.search.includes(word))
-  ).sort((a, b) => preset?.anchors ? a.tourismKm - b.tourismKm : order.get(a.region) - order.get(b.region));
+  ).sort((a, b) => preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99));
   setSelection(null);
   renderResults();
   updateMap();
@@ -918,7 +931,7 @@ function markerContent(item) {
     edit.setAttribute('aria-label', '修改 ' + item.name);
     header.append(edit);
   }
-  card.append(header, element('span', 'badge badge-region', item.region + '・美食'), storeInfo(item));
+  card.append(header, element('span', 'badge badge-region', item.region + '・' + datasetLabel(item.sheet)), storeInfo(item));
   return card;
 }
 
@@ -1144,6 +1157,11 @@ function setEditor(next) {
     else sessionStorage.removeItem('penghuFoodEditor');
   } catch {}
   byId('login').textContent = next ? '登出（' + next.email + '）' : '登入';
+  byId('dataset-row').hidden = !next;
+  if (!next && dataset !== 'food') {
+    switchDataset('food');
+    return;
+  }
   if (foodReady) renderResults();
   if (map) renderMarkers();
 }
@@ -1220,6 +1238,63 @@ try {
   if (saved && saved.exp * 1000 > Date.now() + 60000) setEditor(saved);
 } catch {}
 
+
+function currentItems() {
+  return dataset === 'food' ? food : (datasetCache.get(dataset) || []);
+}
+
+function mapSheetData(key, rows) {
+  return rows.map(r => {
+    const point = coordinates(r.lat, r.lng);
+    const [regionPart, villagePart = ''] = String(r.region || '').split('／');
+    const region = normalizeRegion(regionPart) || '未分區';
+    const location = [villagePart, r.address, r.name].filter(Boolean).join(' ');
+    const island = region === '馬公市' ? location.match(/虎井|桶盤/)?.[0] : '';
+    return {
+      id: key + '-' + r.row, sheet: key, row: r.row, region,
+      tags: r.category ? [r.category] : [], subtype: r.subtype || '', name: r.name,
+      dish: '', picks: '', phone: r.phone || '', address: r.address || '', hours: '',
+      point, sheetUrl: r.url || '', mapUrl: webUrl(r.url) || (point ? mapsLink(point[0], point[1]) : ''),
+      location, island,
+      tourismKm: locationPoint(point) ? Math.min(...cityTourism.anchors.map(anchor => distanceKm(point, anchor))) : Infinity,
+      search: searchable([region, r.category, r.subtype, r.name, r.address, villagePart].join(' '))
+    };
+  });
+}
+
+async function switchDataset(key) {
+  if (key === dataset && (key === 'food' || datasetCache.has(key))) return;
+  for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === key));
+  if (key !== 'food' && !datasetCache.has(key)) {
+    byId('results-count').textContent = '讀取中…';
+    try {
+      if (!editorValid()) throw new Error('登入已過期，請重新登入');
+      const result = await callBackend({ action: 'list', sheet: key, idToken: editor.token });
+      if (!result.ok) throw new Error(result.error || '讀取失敗');
+      datasetCache.set(key, mapSheetData(key, result.rows));
+    } catch (error) {
+      byId('results-count').textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
+      for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === dataset));
+      return;
+    }
+  }
+  dataset = key;
+  byId('category-row').hidden = key !== 'food';
+  byId('results-title').textContent = key === 'food' ? '美食推薦' : datasetLabel(key);
+  if (key !== 'food' && state.category) {
+    state.category = '';
+    for (const chip of document.querySelectorAll('button[data-filter="category"]')) chip.setAttribute('aria-pressed', String(chip.dataset.value === ''));
+  }
+  filterFood();
+}
+
+for (const [key, label] of datasets) {
+  const chip = button(label, 'chip', () => switchDataset(key));
+  chip.dataset.value = key;
+  chip.setAttribute('aria-pressed', String(key === 'food'));
+  byId('datasets').append(chip);
+}
+
 // 依原本網址決定縮放：原本有 21z 就用 21z，沒有就用 60m（衛星）
 function fullUrlFor(lat, lng, original) {
   const pair = lat.toFixed(7) + ',' + lng.toFixed(7);
@@ -1288,7 +1363,7 @@ byId('editor-save').addEventListener('click', async () => {
   status.textContent = '寫回中…';
   try {
     const result = await callBackend({
-      action: 'save', idToken: editor.token,
+      action: 'save', idToken: editor.token, sheet: item.sheet || 'food', row: item.row || 0,
       name: item.name, address: item.address,
       oldLat: item.point ? item.point[0] : '', oldLng: item.point ? item.point[1] : '', oldUrl: item.sheetUrl || '',
       lat: Number(lat.toFixed(7)), lng: Number(lng.toFixed(7)), url
