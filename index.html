@@ -79,7 +79,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .results-search { min-width: 0; min-height: 38px; padding-inline: 8px; }
   .results-search input { min-height: 36px; font-size: .82rem; }
   .filter-row { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 9px; align-items: start; margin-top: 10px; }
-  .filters .filter-row:first-child { margin-top: 0; }
+  .filters .filter-row:first-child, .filters .filter-row[hidden] + .filter-row { margin-top: 0; }
   .filter-label { margin: 0; padding-top: 9px; font-size: .83rem; font-weight: 750; color: #334f61; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; min-height: 36px; border: 1px solid transparent; border-radius: 7px; white-space: nowrap; color: white; background: var(--tone); font-size: .81rem; font-weight: 750; }
@@ -266,6 +266,10 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   <noscript><p class="empty">請啟用 JavaScript 以使用店家篩選。</p></noscript>
   <div class="layout">
     <section class="panel filters" aria-label="快速關鍵字及主類別篩選">
+      <div class="filter-row dataset-row" id="dataset-row" hidden>
+        <p class="filter-label" id="dataset-label">修改資料</p>
+        <div class="chips quick-chips" id="datasets" role="group" aria-labelledby="dataset-label"></div>
+      </div>
       <div class="filter-row">
         <p class="filter-label" id="quick-label">快速關鍵字</p>
         <div class="chips quick-chips" id="quick-keywords" role="group" aria-labelledby="quick-label"></div>
@@ -274,10 +278,6 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
       <div class="filter-row" id="category-row">
         <p class="filter-label" id="categories-label">主類別</p>
         <div class="chips category-chips" id="categories" role="group" aria-labelledby="categories-label"></div>
-      </div>
-      <div class="filter-row dataset-row" id="dataset-row" hidden>
-        <p class="filter-label" id="dataset-label">修改資料</p>
-        <div class="chips quick-chips" id="datasets" role="group" aria-labelledby="dataset-label"></div>
       </div>
     </section>
 
@@ -857,8 +857,7 @@ function groupByRegion(items) {
 
 function renderResults() {
   const root = byId('results');
-  const focused = desktop.matches && selected && matches.includes(selected);
-  const groups = groupByRegion(focused ? [selected, ...matches.filter(item => item !== selected)] : matches);
+  const groups = groupByRegion(matches);
   byId('results-count').textContent = '共 ' + matches.length + ' 筆';
   root.replaceChildren();
   root.scrollTop = 0;
@@ -964,16 +963,24 @@ function chooseItem(item) {
     return;
   }
   if (map && activePoints.includes(item)) selectPoint(item);
-  else {
-    setSelection(item);
+  else focusCard(item);
+}
+
+// 選取的店家：順序不變，原位展開，清單捲動讓它排在最上方
+function focusCard(item) {
+  if (!byId(item.id)) {
+    expandedRegions.add(item.region);
     renderResults();
   }
+  setSelection(item);
+  const root = byId('results');
+  const card = byId(item.id);
+  if (card) root.scrollTop += card.getBoundingClientRect().top - root.getBoundingClientRect().top - 4;
 }
 
 function selectPoint(item) {
   if (!map || !activePoints.includes(item)) return;
-  setSelection(item);
-  renderResults();
+  focusCard(item);
   map.setView(item.point, 21, { animate: false });
   renderMarkers();
   drawnMarkers.get(item.id)?.openPopup();
@@ -1053,8 +1060,7 @@ function renderMarkers() {
       }
       selectedMarker?.getElement()?.classList.remove('is-active');
       if (!isGroup || isActive) {
-        setSelection(item);
-        renderResults();
+        focusCard(item);
         markerEl.classList.add('is-active');
         selectedMarker = marker;
       } else {
