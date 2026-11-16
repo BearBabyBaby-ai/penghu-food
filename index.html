@@ -1723,6 +1723,14 @@ function currentItems() {
     if (!comboCache.has(key)) comboCache.set(key, deriveCombo(state.sub));
     return comboCache.get(key);
   }
+  if (dataset === 'route' && state.quick === '離島路線' && !state.sub) {   // 全部：所有離島路線（吉貝、南海二島、南方四島、七美、藍洞）加上單七美、單望安
+    const key = 'all|' + (datasetCache.get('route') || []).length + '|' + (datasetCache.has('routeExtra') ? 1 : 0);
+    if (!comboCache.has(key)) {
+      const plain = (datasetCache.get('route') || []).filter(i => i.region === '七美鄉' || i.region === '望安鄉');
+      comboCache.set(key, [...Object.keys(comboLabels).flatMap(label => deriveCombo(label)), ...plain]);
+    }
+    return comboCache.get(key);
+  }
   return datasetCache.get(dataset) || [];
 }
 
