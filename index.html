@@ -1197,7 +1197,7 @@ function renderResults() {
       title.setAttribute('role', 'button');
       title.setAttribute('aria-expanded', 'true');
       title.style.cursor = 'pointer';
-      title.addEventListener('click', fold);
+      title.addEventListener('click', () => { fold(); focusGroupOnMap(region); });
       title.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fold(); } });
       if (foldedRegions.has(region)) fold();
     }
@@ -1205,6 +1205,7 @@ function renderResults() {
   }
 }
 const foldedRegions = new Set();
+window.addEventListener('load', () => { let timer = 0; byId('results').addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(syncMapToList, 150); }); });
 
 function filterFood() {
   const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
@@ -1568,6 +1569,32 @@ function initializeMap() {
   });
 }
 
+// 路線：清單目前看到的區域，地圖就專注在那個區域
+function routeGroupPoints() {
+  const root = byId('results');
+  const groups = [...root.querySelectorAll('.group')];
+  if (!groups.length) return activePoints;
+  const top = root.getBoundingClientRect().top + 8;
+  let current = groups[0];
+  for (const g of groups) if (g.getBoundingClientRect().bottom > top + 20) { current = g; break; }
+  const region = current.querySelector('.group-title span')?.textContent;
+  const list = activePoints.filter(i => i.region === region);
+  return list.length ? list : activePoints;
+}
+let syncedRegion = '', lastListProgrammatic = 0;
+function syncMapToList() {
+  if (!isRouteSet() || !map || Date.now() - lastListProgrammatic < 600) return;
+  const points = routeGroupPoints();
+  const region = points[0]?.region || '';
+  if (region === syncedRegion) return;
+  syncedRegion = region;
+  fitPoints(points, 15);
+}
+function focusGroupOnMap(region) {
+  if (!isRouteSet() || !map) return;
+  const list = activePoints.filter(i => i.region === region);
+  if (list.length) { syncedRegion = region; fitPoints(list, 15); }
+}
 // 路線：地圖目前集中在哪個區域，左側清單就跳到對應的區域
 function syncListToMap() {
   if (!isRouteSet() || !map || Date.now() - lastProgrammatic < 400) return;
@@ -1583,7 +1610,11 @@ function syncListToMap() {
   for (const [region, e] of score) if (!top || e.inside > top.inside || (e.inside === top.inside && e.near < top.near)) { best = region; top = e; }
   const root = byId('results');
   const group = [...root.querySelectorAll('.group')].find(g => g.querySelector('.group-title span')?.textContent === best);
-  if (group) root.scrollTop += group.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  if (group && best !== syncedRegion) {
+    syncedRegion = best;
+    lastListProgrammatic = Date.now();
+    root.scrollTop += group.getBoundingClientRect().top - root.getBoundingClientRect().top;
+  }
 }
 function updateMap() {
   if (!desktop.matches) return;
@@ -1594,7 +1625,11 @@ function updateMap() {
   byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
   map.invalidateSize({ pan: false });
   updateZoomFloor();
-  if (activePoints.length && (state.quick || byId('query').value.trim())) {
+  if (isRouteSet() && activePoints.length) {
+    const gp = routeGroupPoints();
+    syncedRegion = gp[0]?.region || '';
+    fitPoints(gp, 15);   // 路線：地圖專注清單第一個區域
+  } else if (activePoints.length && (state.quick || byId('query').value.trim())) {
     fitPoints(activePoints, 15);
   } else {
     showOverview();
