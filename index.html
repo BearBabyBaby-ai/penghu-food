@@ -589,13 +589,17 @@ const routeKeywords = new Map([
   ['南環島(澎南區域)', { regions: ['澎南區域（南環島）'] }], ['湖西(東環島)', { regions: ['湖西鄉（東環島）'] }],
   ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
 ]);
+const fullWidth = label => label.replace(/\(/g, '（').replace(/\)/g, '）');
+const islandKeywords = new Map(['吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美', '藍洞'].map(label => [label, { regions: [label, fullWidth(label)] }]));
+const isIslandRoute = item => [...islandKeywords.values()].some(p => p.regions.includes(item.region));
+const isRouteSet = () => dataset === 'route' || dataset === 'islandRoute';
 const tideKeywords = ['奎壁山分海', '30天潮汐預報', '風浪天氣'];
 const tideModeOf = { '': 'all', '奎壁山分海': 'split', '30天潮汐預報': 'forecast', '風浪天氣': 'wx' };
 // 馬公、白沙的離島區域（廟宇清單排在最後）
 const outlyingTerms = { '馬公市': ['虎井', '桶盤'], '白沙鄉': ['姑婆', '員貝', '吉貝', '鳥嶼', '目斗'] };
 const isOutlying = item => (outlyingTerms[item.region] || []).some(term => item.location.includes(term));
-const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : key === 'route' ? [...routeKeywords.keys()] : [...townKeywords.keys()];
-const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : dataset === 'route' ? routeKeywords.get(state.quick) : townKeywords.get(state.quick);
+const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : key === 'route' ? [...routeKeywords.keys()] : key === 'islandRoute' ? [...islandKeywords.keys()] : [...townKeywords.keys()];
+const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : dataset === 'route' ? routeKeywords.get(state.quick) : dataset === 'islandRoute' ? islandKeywords.get(state.quick) : townKeywords.get(state.quick);
 function rebuildQuickChips() {
   state.quick = '';
   byId('quick-keywords').replaceChildren();
@@ -637,7 +641,7 @@ const expandedRegions = new Set();
 // 電腦端登入後可切換修改的資料類別
 const datasets = new Map([
   ['food', '美食'], ['spot', '景點'], ['temple', '廟宇'], ['store', '其他店家'],
-  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線'],
+  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線'], ['islandRoute', '離島路線'],
   ['tide', '各地區潮汐']
 ]);
 let dataset = 'food';
@@ -1160,7 +1164,7 @@ function renderResults() {
 
     appendCards(dataset !== 'food' || expandedRegions.has(region) ? items.length : (groups.size === 1 ? chunkSize : 3));   // 美食以外一次全部顯示
     group.append(title);
-    if (dataset === 'route') {
+    if (isRouteSet()) {
       const ordered = items.filter(i => i.order).sort((a, b) => a.order - b.order);
       if (ordered.length > 1) {
         const mid = ordered.slice(1, -1).map(i => i.name);
@@ -1182,7 +1186,7 @@ function filterFood() {
     words.every(word => item.search.includes(word))
   ).sort((a, b) => {
     if (dataset === 'speed') return (Number(a.no) || 9999) - (Number(b.no) || 9999) || a.row - b.row;
-    if (dataset === 'route') return String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
+    if (isRouteSet()) return String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
     if (dataset === 'temple') return (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99) || Number(isOutlying(a)) - Number(isOutlying(b));
     return preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99);
   });
@@ -1405,7 +1409,7 @@ function roadFor(list) {
         const line = data?.routes?.[0]?.geometry?.coordinates;
         if (!line?.length) throw new Error('no route');
         roadCache.set(cacheKey, line.map(([lng, lat]) => [lat, lng]));
-        if (dataset === 'route') renderMarkers();
+        if (isRouteSet()) renderMarkers();
       })
       .catch(() => roadCache.set(cacheKey, false));
   }
@@ -1413,7 +1417,7 @@ function roadFor(list) {
 }
 
 function drawRouteLines(zoom) {
-  if (dataset !== 'route') return;
+  if (!isRouteSet()) return;
   const byArea = new Map();
   for (const item of activePoints.filter(i => i.order)) {
     if (!byArea.has(item.region)) byArea.set(item.region, []);
@@ -1622,7 +1626,10 @@ try {
 
 
 function currentItems() {
-  return dataset === 'food' ? food : (datasetCache.get(dataset) || []);
+  if (dataset === 'food') return food;
+  if (dataset === 'route') return (datasetCache.get('route') || []).filter(i => !isIslandRoute(i));
+  if (dataset === 'islandRoute') return (datasetCache.get('route') || []).filter(isIslandRoute);
+  return datasetCache.get(dataset) || [];
 }
 
 const DIR_ARROW = { '北': '↑', '南': '↓', '東': '→', '西': '←', '東北': '↗', '西北': '↖', '東南': '↘', '西南': '↙' };
@@ -1752,8 +1759,10 @@ async function switchDataset(key) {
     window.penghuTideMode('all');
     return;
   }
-  if (key === dataset && (key === 'food' || datasetCache.has(key))) return;
-  for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === key));
+  const shown = key;                                   // 畫面上選的類別
+  if (key === 'islandRoute') key = 'route';             // 離島路線與路線讀同一份資料
+  if (shown === dataset && (key === 'food' || datasetCache.has(key))) return;
+  for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === shown));
   if (key !== 'food' && !datasetCache.has(key)) {
     byId('results-count').textContent = '讀取中…';
     try {
@@ -1766,7 +1775,7 @@ async function switchDataset(key) {
         // 路線排除離島：白沙（鳥嶼、姑婆嶼、吉貝、目斗、員貝、澎澎灘）、馬公（虎井、桶盤）、望安（東吉、西吉等離島支線）
         const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
         for (let i = items.length - 1; i >= 0; i--) {
-          if (outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) items.splice(i, 1);
+          if (!isIslandRoute(items[i]) && outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) items.splice(i, 1);
         }
         autoOrderLoopRoutes(items);
       }
@@ -1787,13 +1796,13 @@ async function switchDataset(key) {
     }
   }
   const wasTide = dataset === 'tide';
-  const changed = dataset !== key;
-  dataset = key;
+  const changed = dataset !== shown;
+  dataset = shown;
   if (wasTide) window.penghuShowView('info');
   if (changed) rebuildQuickChips();
-  byId('category-row').hidden = key !== 'food';
-  byId('results-title').textContent = key === 'food' ? '美食推薦' : datasetLabel(key);
-  if (key !== 'food' && state.category) {
+  byId('category-row').hidden = shown !== 'food';
+  byId('results-title').textContent = shown === 'food' ? '美食推薦' : datasetLabel(shown);
+  if (shown !== 'food' && state.category) {
     state.category = '';
     for (const chip of document.querySelectorAll('button[data-filter="category"]')) chip.setAttribute('aria-pressed', String(chip.dataset.value === ''));
   }
