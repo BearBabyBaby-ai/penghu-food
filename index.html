@@ -1866,7 +1866,7 @@ async function switchDataset(key) {
       if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
       if (key === 'route') {
         // 路線排除離島：白沙（鳥嶼、姑婆嶼、吉貝、目斗、員貝、澎澎灘）、馬公（虎井、桶盤）、望安（東吉、西吉等離島支線）
-        const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|將軍|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
+        const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|將軍嶼|將軍澳|花嶼|東嶼坪|西嶼坪|貓嶼|頭巾|鐵砧|離島/;
         const removed = [];
         for (let i = items.length - 1; i >= 0; i--) {
           if (outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) removed.unshift(...items.splice(i, 1));
