@@ -1427,31 +1427,19 @@ function roadFor(list) {
   return roadCache.get(cacheKey);
 }
 
-// 海上航道：從 OpenStreetMap 抓取實際渡輪航道（route=ferry），抓不到的路段才用直線虛線
-let ferryWays = null;
-function loadFerryWays() {
-  if (ferryWays) return;
-  ferryWays = [];
-  const q = '[out:json][timeout:25];way["route"="ferry"](22.9,119.2,23.9,119.9);out geom;';
-  fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q))
-    .then(r => r.json())
-    .then(data => {
-      ferryWays = (data.elements || []).filter(e => e.geometry?.length > 1).map(e => e.geometry.map(g => [g.lat, g.lon]));
-      if (isRouteSet() && ferryWays.length) renderMarkers();
-    })
-    .catch(() => {});
-}
+// 海上航道：沿用熊熊澎湖之旅的航線（馬公⇄望安⇄七美，避開陸地）；東吉、西吉沒有航線資料的航段才用直線虛線
+const FERRY_PORTS = [[23.5657, 119.57224], [23.36163, 119.50859], [23.19535, 119.41926]];
+const FERRY_LEGS = [[[23.5657,119.57224],[23.56516,119.57224],[23.55981,119.56582],[23.55392,119.54713],[23.54804,119.54188],[23.54108,119.54012],[23.48968,119.54421],[23.36699,119.51618],[23.36109,119.50918],[23.36163,119.50859]],[[23.36163,119.50859],[23.35948,119.51151],[23.35359,119.51385],[23.35251,119.51385],[23.21628,119.40933],[23.21413,119.40933],[23.19428,119.41517],[23.19267,119.41692],[23.1932,119.4175],[23.19428,119.41809],[23.19428,119.41984],[23.19535,119.41926]]];
 function seaFor(from, to) {
-  loadFerryWays();
-  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  let best = null, bestCost = 0.06;
-  for (const way of ferryWays) {
-    for (const line of [way, [...way].reverse()]) {
-      const cost = d(line[0], from) + d(line[line.length - 1], to);
-      if (cost < bestCost) { bestCost = cost; best = line; }
-    }
+  const near = p => FERRY_PORTS.findIndex(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.015);
+  const a = near(from), b = near(to);
+  if (a < 0 || b < 0 || a === b) return null;
+  let line = [];
+  for (let k = a; k !== b; k += a < b ? 1 : -1) {
+    const leg = a < b ? FERRY_LEGS[k] : [...FERRY_LEGS[k - 1]].reverse();
+    line = line.concat(line.length ? leg.slice(1) : leg);
   }
-  return best ? [from, ...best, to] : null;
+  return [from, ...line, to];
 }
 
 function drawRouteLines(zoom) {
