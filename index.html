@@ -1430,13 +1430,19 @@ function roadFor(list) {
 // 海上航道：沿用熊熊澎湖之旅的航線（馬公⇄望安⇄七美，避開陸地）；東吉、西吉沒有航線資料的航段才用直線虛線
 const FERRY_PORTS = [[23.5657, 119.57224], [23.36163, 119.50859], [23.19535, 119.41926]];
 const FERRY_LEGS = [[[23.5657,119.57224],[23.56516,119.57224],[23.55981,119.56582],[23.55392,119.54713],[23.54804,119.54188],[23.54108,119.54012],[23.48968,119.54421],[23.36699,119.51618],[23.36109,119.50918],[23.36163,119.50859]],[[23.36163,119.50859],[23.35948,119.51151],[23.35359,119.51385],[23.35251,119.51385],[23.21628,119.40933],[23.21413,119.40933],[23.19428,119.41517],[23.19267,119.41692],[23.1932,119.4175],[23.19428,119.41809],[23.19428,119.41984],[23.19535,119.41926]]];
+let seaViaWangan = true;
 function seaFor(from, to) {
   const near = p => FERRY_PORTS.findIndex(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.015);
   const a = near(from), b = near(to);
   if (a < 0 || b < 0 || a === b) return null;
   let line = [];
   for (let k = a; k !== b; k += a < b ? 1 : -1) {
-    const leg = a < b ? FERRY_LEGS[k] : [...FERRY_LEGS[k - 1]].reverse();
+    let leg = a < b ? FERRY_LEGS[k] : [...FERRY_LEGS[k - 1]].reverse();
+    if (!seaViaWangan) {   // 七美、藍洞／南方四島不停靠望安：航道在望安港前後截斷，不進港
+      const next = k + (a < b ? 1 : -1);
+      if (next !== b) leg = leg.slice(0, Math.max(2, leg.length - 3));
+      if (line.length) leg = leg.slice(3);
+    }
     line = line.concat(line.length ? leg.slice(1) : leg);
   }
   return [from, ...line, to];
@@ -1463,6 +1469,7 @@ function drawRouteLines(zoom) {
     runs.forEach((run, r) => {
       if (r > 0) {   // 跨島（海上）以虛線連接
         const from = runs[r - 1].items[runs[r - 1].items.length - 1].point, to = run.items[0].point;
+        seaViaWangan = !['four', 'blue'].includes(comboLabels[list[0].region]);
         const sea = seaFor(from, to);
         L.polyline(sea || [from, to], { color, weight: sea ? 4 : 3, opacity: sea ? .8 : .6, dashArray: '3 9', interactive: false }).addTo(markerLayer);
       }
@@ -1690,7 +1697,8 @@ function deriveCombo(label) {
   const byOrder = list => list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
   const seven = ['七美鄉', byOrder(all.filter(i => i.region === '七美鄉'))];
   const harbor = (segment) => [segment, extra.maGong ? [routePoint('南海觀光碼頭', extra.maGong.lat, extra.maGong.lng, { village: '馬公市／光復里' })].filter(Boolean) : []];
-  const east = ['東吉嶼', out.filter(i => /東吉/.test(i.name) && i.point)], west = ['西吉嶼藍洞', out.filter(i => /西吉|藍洞/.test(i.name) && i.point)];
+  const noTown = list => list.map(i => ({ ...i, town: '' }));
+  const east = ['東吉嶼', noTown(out.filter(i => /東吉/.test(i.name) && i.point))], west = ['西吉嶼藍洞', noTown(out.filter(i => /西吉|藍洞/.test(i.name) && i.point))];
   const kind = comboLabels[label];
   let parts;
   if (kind === 'two') parts = [harbor('南海碼頭起'), seven, ['望安鄉', byOrder(all.filter(i => i.region === '望安鄉'))], harbor('南海碼頭終')];
