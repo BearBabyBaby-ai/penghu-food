@@ -767,14 +767,25 @@ function storeInfo(item) {
     }
     detailLine(info, '類別', categories);
   }
-  detailLine(info, '主祀', item.deity);
-  detailLine(info, '簡易說明', item.desc);
   detailLine(info, '餐食／服務', item.dish);
   detailLine(info, '推薦', item.picks);
   detailLine(info, '地址', item.address);
   detailLine(info, '電話', phoneValue(item.phone));
   detailLine(info, '營業時間', item.hours);
   return info;
+}
+
+// 元宵資訊只在元宵活動前 1 個月起到活動結束前顯示
+function lanternSoon(item) {
+  const m = String(item.lanternDates || '').match(/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s*[-~－至]\s*(\d{4})\/(\d{1,2})\/(\d{1,2}))?/);
+  if (!m) return false;
+  const start = new Date(+m[1], m[2] - 1, +m[3]);
+  const end = m[4] ? new Date(+m[4], m[5] - 1, +m[6]) : new Date(start);
+  end.setHours(23, 59, 59);
+  const from = new Date(start);
+  from.setDate(from.getDate() - 30);
+  const now = new Date();
+  return now >= from && now <= end;
 }
 
 function cardField(label, value, kind) {
@@ -821,7 +832,6 @@ function createCard(item) {
   const badges = element('div', 'badges');
   if (item.sheet === 'route') {
     if (item.role) badges.append(element('span', 'badge badge-role', item.role));
-    if (item.village) badges.append(element('span', 'badge badge-region', item.village));
   }
   if (item.island) badges.append(element('span', 'badge badge-island', '離島（' + item.island + '）'));
   badges.append(...item.tags.map(categoryBadge));
@@ -833,9 +843,9 @@ function createCard(item) {
 
   // 第一行：三欄配置 (店名 │ 類別 │ 導航)
   const top = element('div', 'card-top card-name-line');
-  const townLeft = item.sheet === 'speed';
+  const townLeft = item.sheet === 'speed' || (item.sheet === 'route' && item.town);
   top.style.gridTemplateColumns = (townLeft ? 'auto ' : '') + 'minmax(0, max-content) minmax(max-content, 1fr) auto' + (editor ? ' auto' : '');
-  if (townLeft) top.append(element('span', 'badge badge-region', item.region));
+  if (townLeft) top.append(element('span', 'badge badge-region', item.sheet === 'route' ? item.town : item.region));
   top.append(name, badges);
   if (item.mapUrl) top.append(go);
   if (editor) {
@@ -845,46 +855,38 @@ function createCard(item) {
   }
   card.append(top);
 
-  if (item.sheet === 'speed') {
-    const l1 = element('div', 'card-line');
-    l1.append(cardField('速限', item.speed ? item.speed + ' 公里' : '', 'limit'), cardField('拍攝方向', item.dir, 'dir'));
-    const l2 = element('div', 'card-line');
-    l2.append(cardField('取締項目', item.items, 'items'), cardField('科技執法種類', item.tech, 'tech'));
-    card.append(l1, l2);
-    if (item.unit) card.append(cardField('管轄分局', item.unit, 'unit'));
-  }
-  if (item.sheet === 'route') {
-    const l1 = element('div', 'card-line');
-    l1.append(cardField('鄉市／村里', item.village, 'village'), cardField('順序', item.order ? '第 ' + item.order + ' 點' : '', 'order'));
-    card.append(l1);
-    if (item.note) card.append(cardField('備註', item.note, 'note'));
-  }
-
-  if (item.deity) card.append(cardField('主祀', item.deity, 'deity'));
-  if (item.desc) card.append(cardField('簡易說明', item.desc, 'desc'));
-  if (item.history) card.append(cardField('廟宇史蹟', item.history, 'history'));
-  if (item.legend) card.append(cardField('傳說', item.legend, 'legend'));
-  if (item.lanternTheme || item.lanternDates || item.lanternContent) {
-    card.append(cardField('元宵', [item.lanternTheme, item.lanternDates, item.lanternTime, item.lanternContent].filter(Boolean).join('｜'), 'lantern'));
-  }
-
-  // 第二行：雙欄配置 (代表餐食 │ 推薦)
-  if (item.dish || item.picks) {
-    const menu = element('div', 'card-line');
-    menu.append(cardField('代表餐食', item.dish, 'dish'), cardField('推薦', item.picks, 'picks'));
-    card.append(menu);
-  }
-
-  // 第三行：雙欄配置 (電話 │ 營業時間)
-  if (item.phone || item.hours) {
-    const info = element('div', 'card-line');
-    info.append(cardField('電話', phoneValue(item.phone), 'phone'), cardField('營業時間', item.hours, 'hours'));
-    card.append(info);
-  }
-
-  // 第四行：單欄配置靠左 (地址)
-  if (item.address) {
-    card.append(cardField('地址', item.address, 'address'));
+  // 資訊卡內容：每個類別只顯示指定的欄位
+  const kind = item.sheet || 'food';
+  const add = (label, value, cls) => { if (value) card.append(cardField(label, value, cls)); };
+  const pair = (a, b) => { if (a.textContent || b.textContent) { const row = element('div', 'card-line'); row.append(a, b); card.append(row); } };
+  if (kind === 'food') {
+    add('代表餐食', item.dish, 'dish');
+    pair(cardField('電話', phoneValue(item.phone), 'phone'), cardField('營業時間', item.hours, 'hours'));
+    add('地址', item.address, 'address');
+  } else if (kind === 'spot') {
+    add('地址', item.address, 'address');
+    add('備註', item.desc, 'desc');
+  } else if (kind === 'temple') {
+    add('主祀', item.deity, 'deity');
+    add('地址', item.address, 'address');
+    if (item.phone) card.append(cardField('電話', phoneValue(item.phone), 'phone'));
+    if (lanternSoon(item)) add('元宵資訊', [item.lanternTheme, item.lanternDates, item.lanternTime, item.lanternContent].filter(Boolean).join('｜'), 'lantern');
+  } else if (kind === 'store') {
+    add('地址', item.address, 'address');
+    if (item.phone) card.append(cardField('電話', phoneValue(item.phone), 'phone'));
+  } else if (kind === 'tour') {
+    add('行程項目', item.dish, 'dish');
+    if (item.phone) card.append(cardField('電話', phoneValue(item.phone), 'phone'));
+    add('地址', item.address, 'address');
+  } else if (kind === 'port') {
+    add('地址', item.address, 'address');
+    add('簡易說明', item.desc, 'desc');
+  } else if (kind === 'speed') {
+    pair(cardField('速限', item.speed ? item.speed + ' 公里' : '', 'limit'), cardField('拍攝方向', item.dir, 'dir'));
+    pair(cardField('取締項目', item.items, 'items'), cardField('科技執法種類', item.tech, 'tech'));
+  } else if (kind === 'route') {
+    add('鄉市／村里', item.village, 'village');
+    add('備註', item.note, 'note');
   }
 
   return card;
@@ -1388,12 +1390,12 @@ const DETAIL_SOURCES = {
     parse: ([no, name, lat, lng, speed, dir, items, tech, unit]) => ({ name, lat, lng, data: { no, speed, dir, items, tech, unit } }) },
   tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J', required: 'D',
     parse: ([name, dish, picks, phone, address, hours]) => ({ name, data: { dish, picks, phone, address, hours } }) },
-  spot: { tabId: '2085392869', columns: 'E,G,H,L,M', required: 'E',
-    parse: ([name, lat, lng, desc, legend]) => ({ name, lat, lng, data: { desc, legend } }) },
-  port: { tabId: '777001', columns: 'E,G,H,L,M', required: 'E',
-    parse: ([name, lat, lng, desc, legend]) => ({ name, lat, lng, data: { desc, legend } }) },
-  temple: { tabId: '2137991614', columns: 'C,D,G,H,L,N,O,P,R,S', required: 'C',
-    parse: ([name, deity, lat, lng, lanternTheme, lanternDates, lanternTime, lanternContent, history, legend]) => ({ name, lat, lng, data: { deity, lanternTheme, lanternDates, lanternTime, lanternContent, history, legend } }) },
+  spot: { tabId: '2085392869', columns: 'E,G,H,L', required: 'E',
+    parse: ([name, lat, lng, desc]) => ({ name, lat, lng, data: { desc } }) },
+  port: { tabId: '777001', columns: 'E,G,H,L', required: 'E',
+    parse: ([name, lat, lng, desc]) => ({ name, lat, lng, data: { desc } }) },
+  temple: { tabId: '2137991614', columns: 'C,D,G,H,L,N,O,P', required: 'C',
+    parse: ([name, deity, lat, lng, lanternTheme, lanternDates, lanternTime, lanternContent]) => ({ name, lat, lng, data: { deity, lanternTheme, lanternDates, lanternTime, lanternContent } }) },
   route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,O', required: 'E',
     parse: ([area, role, order, name, village, lat, lng, rule, note]) => ({ name, lat, lng, data: { area, role, order: Number(order) || 0, village, rule, note } }) }
 };
@@ -1415,6 +1417,7 @@ function mergeDetails(key, items, details) {
     if (!d) continue;
     for (const [field, value] of Object.entries(d)) if (value !== '' && value != null && !item[field]) item[field] = value;
     if (key === 'route' && d.area) item.region = d.area;
+    if (key === 'route' && d.village) item.town = d.village.split('／')[0];
     if (key === 'route') item.search += ' ' + searchable([d.area, d.role, d.village].join(' '));
   }
 }
