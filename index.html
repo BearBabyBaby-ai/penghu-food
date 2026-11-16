@@ -986,6 +986,12 @@ function phoneValue(number) {
 
 function storeInfo(item) {
   const info = element('dl', 'details-grid');
+  if (item.sheet === 'route') {
+    detailLine(info, '鄉市／村里', item.village);
+    detailLine(info, '路線位置', routePointLabel(item));
+    detailLine(info, '備註', item.note);
+    return info;
+  }
   detailLine(info, '區域', item.region);
   if (item.sheet === 'speed') {
     detailLine(info, '類型', item.tags.join('・'));
@@ -1067,11 +1073,12 @@ function createCard(item) {
   });
   const badges = element('div', 'badges');
   if (item.sheet === 'route') {
-    if (item.role) badges.append(element('span', 'badge badge-role', item.role));
+    badges.append(element('span', 'badge badge-role', routePointLabel(item)));
+  } else {
+    badges.append(...item.tags.map(categoryBadge));
+    if (item.subtype && !item.tags.includes(item.subtype)) badges.append(element('span', 'badge-sub', item.subtype));
   }
   if (item.island) badges.append(element('span', 'badge badge-island', '離島（' + item.island + '）'));
-  badges.append(...item.tags.map(categoryBadge));
-  if (item.subtype && !item.tags.includes(item.subtype)) badges.append(element('span', 'badge-sub', item.subtype));
 
   const go = externalLink('', item.mapUrl, 'action primary card-nav');
   go.append(element('span', 'desktop-nav-text', '導航'), element('span', 'mobile-nav-text', 'Google 地圖 ↗'));
@@ -1139,23 +1146,43 @@ function groupByRegion(items) {
   return groups;
 }
 
-function renderResults() {
+function routePointLabel(item) {
+  if (item.role === '起點' || item.role === '終點') return item.role;
+  if (item.order) return '途經點';
+  const placement = routePlacements.get(item.region)?.get(item.id);
+  if (!placement) return item.status || '路線景點';
+  const distance = Math.round(placement.offset);
+  return '距主線 ' + (distance < 1000 ? distance + ' 公尺' : (distance / 1000).toFixed(1) + ' 公里');
+}
+
+function listRoutePoints(items, region) {
+  const positions = routePlacements.get(region);
+  const rank = item => item.role === '起點' ? 0 : item.role === '終點' ? 2 : 1;
+  return [...items].sort((a, b) => rank(a) - rank(b) ||
+    (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0) ||
+    (positions?.get(a.id)?.along ?? Infinity) - (positions?.get(b.id)?.along ?? Infinity) ||
+    (a.order || Infinity) - (b.order || Infinity) || (a.segmentIndex === undefined ? a.row - b.row : 0));
+}
+
+function renderResults(preserveScroll = false) {
   const root = byId('results');
+  const scroll = preserveScroll ? root.scrollTop : 0;
   const groups = dataset === 'speed' ? new Map([['測速與科技執法', matches]]) : groupByRegion(matches);
-  byId('results-count').textContent = '共 ' + (isRouteSet() ? groups.size : matches.length) + ' 筆';   // 路線：筆數 = 路線數
+  const route = isRouteSet();
+  byId('results-count').textContent = route ? groups.size + ' 條路線・' + matches.length + ' 個點位' : '共 ' + matches.length + ' 筆';
   root.replaceChildren();
-  root.scrollTop = 0;
   if (!groups.size) {
-    root.append(element('p', 'empty', '查無符合條件的店家。可以更換鄉市、主類別或搜尋詞。'));
+    root.append(element('p', 'empty', route ? '查無符合條件的路線景點。' : '查無符合條件的店家。可以更換鄉市、主類別或搜尋詞。'));
     return;
   }
 
-  for (const [region, items] of groups) {
+  for (const [region, groupItems] of groups) {
+    const items = route ? listRoutePoints(groupItems, region) : groupItems;
     const group = element('section', 'group');
     const title = element('h3', 'group-title');
     title.id = 'group-' + region;
     group.setAttribute('aria-labelledby', title.id);
-    title.append(element('span', '', region), element('span', '', items.length + ' 筆'));
+    title.append(element('span', '', region), element('span', '', items.length + (route ? ' 個點位' : ' 筆')));
     if (dataset === 'speed') title.hidden = true;   // 測速與科技執法不分鄉市，鄉市放在卡片左側
     styleColor(group, isRouteSet() ? routePalette : regionPalette, region);
     const cards = element('div', 'cards');
@@ -1178,12 +1205,15 @@ function renderResults() {
 
     appendCards(dataset !== 'food' || expandedRegions.has(region) ? items.length : (groups.size === 1 ? chunkSize : 3));   // 美食以外一次全部顯示
     group.append(title);
-    if (isRouteSet()) {
-      const ordered = items.filter(i => i.order).sort((a, b) => a.order - b.order);
-      if (ordered.length > 1) {
-        const mid = ordered.slice(1, -1).map(i => i.name);
-        group.append(element('p', 'route-rule', '起點 ' + ordered[0].name + (mid.length ? ' → 沿途 ' + mid.join(' → ') : '') + ' → 終點 ' + ordered[ordered.length - 1].name));
+    if (route) {
+      const full = currentItems().filter(i => i.region === region);
+      const ordered = full.filter(i => i.order).sort((a, b) => a.order - b.order);
+      const rule = ordered[0]?.segment ? '' : full.find(i => i.rule)?.rule;
+      if (rule || ordered.length > 1) {
+        const names = ordered.map(i => i.name).join(' → ');
+        group.append(element('p', 'route-rule', (rule || names).replace(/\s*→\s*/g, ' → ')));
       }
+      if (unavailableRoads.has(region)) group.append(element('p', 'route-rule', '道路線暫時無法載入。'));
     }
     group.append(cards, more);
     if (isRouteSet()) {   // 路線：點標題折疊／展開該區域
@@ -1209,6 +1239,7 @@ function renderResults() {
     }
     root.append(group);
   }
+  root.scrollTop = scroll;
 }
 const foldedRegions = new Set();
 window.addEventListener('load', () => { let timer = 0; byId('results').addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(syncMapToList, 150); }); });
@@ -1248,9 +1279,12 @@ function markerContent(item) {
   const card = element('div', 'popup-card');
   styleColor(card, regionPalette, item.region);
   const header = element('div', 'popup-head');
-  const go = externalLink('導航', item.mapUrl, 'popup-go');
-  go.setAttribute('aria-label', '導航到 ' + item.name);
-  header.append(element('h3', '', item.name), go);
+  header.append(element('h3', '', item.name));
+  if (item.mapUrl) {
+    const go = externalLink('導航', item.mapUrl, 'popup-go');
+    go.setAttribute('aria-label', '導航到 ' + item.name);
+    header.append(go);
+  }
   if (editor && !item.readOnly) {
     header.style.gridTemplateColumns = 'minmax(0, 1fr) auto auto';
     const edit = button('修改', 'popup-go popup-edit', () => {
@@ -1292,7 +1326,7 @@ function clusterContent(items) {
     row.append(button(item.region + '・' + item.name, 'point-button', () => selectPoint(item)));
     list.append(row);
   }
-  content.append(element('h3', '', '此處有 ' + items.length + ' 筆店家'), list);
+  content.append(element('h3', '', '此處有 ' + items.length + (isRouteSet() ? ' 個路線點位' : ' 筆店家')), list);
   return content;
 }
 
@@ -1368,7 +1402,7 @@ function renderMarkers() {
     const tone = colors.length === 1 ? colors[0] : 'conic-gradient(' +
       colors.map((color, i) => color + ' ' + (i / colors.length * 100) + '% ' +
         ((i + 1) / colors.length * 100) + '%').join(', ') + ')';
-    const markerTitle = isGroup ? areas.join('、') + '｜' + points.length + ' 筆店家' : item.region + '｜' + item.name;
+    const markerTitle = isGroup ? areas.join('、') + '｜' + points.length + (isRouteSet() ? ' 個點位' : ' 筆店家') : item.region + '｜' + item.name;
     const size = isGroup ? (points.length > 9 ? 33 : 27) : (isActive ? 19 : 15);
     const location = isGroup && !isActive ? [
       points.reduce((sum, p) => sum + p.point[0], 0) / points.length,
@@ -1440,31 +1474,120 @@ function renderMarkers() {
   drawRouteLines(zoom);
 }
 
-// 路線：依控制點順序，沿實際道路從起點連到終點，線上加方向箭頭
+// 指定道路的途經座標。縣道控制點來自熊熊綜合系統的「測速與科技執法」分頁。
+const county204Linto = [23.563566, 119.64445];
+const county202Huxi = [23.584229, 119.656944];
+const county202Xixi = [23.58224, 119.63679];
+const county203North = [[23.58456, 119.60815], [23.64951, 119.59951], [23.6582239, 119.5549661]];
+const county203Xiyu = [[23.63683, 119.52853], [23.59831, 119.5091]];
+
+function roadVia(from, to, areaItems) {
+  const rule = from.rule || '';
+  if (from.region === '湖西鄉（東環島）') {
+    if (rule.includes('204') && from.role === '起點' && to.name.startsWith('龍門')) return [county204Linto];
+    if (rule.includes('202') && from.name.includes('奎壁山') && to.name.startsWith('成功水庫')) return [county202Huxi, county202Xixi];
+    if (rule.includes('澎11') && from.name.startsWith('成功水庫') && to.name === '鼎灣四眼井') {
+      // 以澎11線通往東石的路口附近點位，約束由成功橋西端北轉的走向。
+      const dongshi = areaItems.find(item => item.name === '東石環保公園')?.point;
+      return dongshi ? [dongshi] : [];
+    }
+  }
+  if (from.region === '北環島（白沙、西嶼）' && rule.includes('203')) {
+    if (from.role === '起點' && to.name === '漁翁島遊客中心') return county203North;
+    if (from.name === '漁翁島遊客中心' && to.name.includes('燈塔')) return county203Xiyu;
+    if (from.name.includes('燈塔') && to.role === '終點') return [...county203North, ...county203Xiyu].reverse();
+  }
+  return [];
+}
+
 const roadCache = new Map();
 const roadTries = new Map();
-function roadFor(list) {
-  const coords = list.map(i => i.point[1].toFixed(6) + ',' + i.point[0].toFixed(6)).join(';');
-  const walking = list.some(i => /步行/.test([i.rule, i.note].join(' ')));
+const routePlacements = new Map();
+const positionedRoads = new Map();
+const unavailableRoads = new Set();
+let routeListFrame = 0;
+
+function refreshRouteList() {
+  if (routeListFrame) return;
+  routeListFrame = requestAnimationFrame(() => {
+    routeListFrame = 0;
+    if (isRouteSet()) renderResults(true);
+  });
+}
+
+function roadFor(list, areaItems) {
+  const waypoints = [list[0].point];
+  const waypointIndex = [0];
+  for (let i = 1; i < list.length; i++) {
+    waypoints.push(...roadVia(list[i - 1], list[i], areaItems), list[i].point);
+    waypointIndex.push(waypoints.length - 1);
+  }
+  const coords = waypoints.map(([lat, lng]) => lng.toFixed(7) + ',' + lat.toFixed(7)).join(';');
+  const walking = list[0].region === '馬公市區' || list.some(i => /步行/.test([i.rule, i.note].join(' ')));
   const cacheKey = (walking ? 'foot|' : 'car|') + coords;
   if (!roadCache.has(cacheKey)) {
     roadCache.set(cacheKey, null);
     const base = walking ? 'https://routing.openstreetmap.de/routed-foot/' : 'https://routing.openstreetmap.de/routed-car/';
     fetch(base + 'route/v1/driving/' + coords + '?overview=full&geometries=geojson&continue_straight=false')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Road service unavailable');
+        return r.json();
+      })
       .then(data => {
-        const line = data?.routes?.[0]?.geometry?.coordinates;
-        if (!line?.length) throw new Error('no route');
-        roadCache.set(cacheKey, line.map(([lng, lat]) => [lat, lng]));
+        const route = data?.routes?.[0];
+        const line = route?.geometry?.coordinates;
+        if (line?.length < 2 || !line?.every(p => p.length >= 2 && p.slice(0, 2).every(Number.isFinite)) ||
+            route.legs?.length !== waypoints.length - 1 || !route.legs.every(leg => Number.isFinite(leg.distance))) throw new Error('Incomplete road route');
+        const legPosition = [0];
+        for (const { distance } of route.legs) legPosition.push(legPosition.at(-1) + distance);
+        roadCache.set(cacheKey, { line: line.map(([lng, lat]) => [lat, lng]), legPosition });
         if (isRouteSet()) renderMarkers();
       })
       .catch(() => {   // 讀取失敗：稍後自動重試（最多 4 次），不畫直線
         roadTries.set(cacheKey, (roadTries.get(cacheKey) || 0) + 1);
         if (roadTries.get(cacheKey) < 4) window.setTimeout(() => { roadCache.delete(cacheKey); if (isRouteSet()) renderMarkers(); }, 2500);
-        else roadCache.set(cacheKey, false);
+        else {
+          roadCache.set(cacheKey, false);
+          if (isRouteSet()) renderMarkers();
+        }
       });
   }
-  return roadCache.get(cacheKey);
+  return { data: roadCache.get(cacheKey), waypointIndex };
+}
+
+// 對照沿路里程與垂直距離。景點座標仍使用原表的實際位置。
+function positionRoutePoints(region, points, stops, road, waypointIndex) {
+  if (positionedRoads.get(region) === road && routePlacements.get(region)?.has(stops[0].id)) return;
+  const [lat0, lng0] = road.line[0];
+  const lngScale = 111320 * Math.cos(lat0 * Math.PI / 180);
+  const xy = ([lat, lng]) => [(lng - lng0) * lngScale, (lat - lat0) * 111320];
+  const line = road.line.map(xy);
+  const segments = [];
+  let total = 0;
+  for (let i = 1; i < line.length; i++) {
+    const [x, y] = line[i - 1];
+    const dx = line[i][0] - x, dy = line[i][1] - y;
+    const length = Math.hypot(dx, dy);
+    if (length) segments.push({ x, y, dx, dy, length, along: total });
+    total += length;
+  }
+  const places = new Map();
+  const legTotal = road.legPosition.at(-1);
+  if (legTotal > 0) stops.forEach((item, i) => places.set(item.id, { along: total * road.legPosition[waypointIndex[i]] / legTotal }));
+  for (const item of points) {
+    if (!item.point || places.has(item.id)) continue;
+    const [px, py] = xy(item.point);
+    let best = null;
+    for (const s of segments) {
+      const t = Math.max(0, Math.min(1, ((px - s.x) * s.dx + (py - s.y) * s.dy) / s.length ** 2));
+      const offset = Math.hypot(px - s.x - s.dx * t, py - s.y - s.dy * t);
+      if (!best || offset < best.offset) best = { offset, along: s.along + t * s.length };
+    }
+    if (best) places.set(item.id, best);
+  }
+  routePlacements.set(region, places);
+  positionedRoads.set(region, road);
+  refreshRouteList();
 }
 
 // 海上航道：依澎湖陸域輪廓（內政部村里界）計算的避開陸地、離岸航行路徑；找不到的航段不畫直線
@@ -1480,22 +1603,20 @@ function seaFor(from, to) {
 
 function drawRouteLines(zoom) {
   if (!isRouteSet()) return;
-  const byArea = new Map();
-  for (const item of activePoints.filter(i => i.order)) {
-    if (!byArea.has(item.region)) byArea.set(item.region, []);
-    byArea.get(item.region).push(item);
-  }
+  const shown = new Set(matches.map(item => item.region));
+  const byArea = groupByRegion(currentItems().filter(item => shown.has(item.region)));
   const palette = ['#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be185d'];
   let index = 0;
-  for (const list of byArea.values()) {
-    list.sort((a, b) => a.order - b.order);
-    const color = routePalette.get(list[0].region)?.[0] || palette[index++ % palette.length];
+  for (const [region, area] of byArea) {
+    const list = area.filter(item => item.order && item.point).sort((a, b) => a.order - b.order);
+    const color = routePalette.get(region)?.[0] || palette[index++ % palette.length];
     if (list.length < 2) continue;
     const runs = [];
     for (const item of list) {
       const seg = item.segment || item.region, last = runs[runs.length - 1];
       if (last && last.seg === seg) last.items.push(item); else runs.push({ seg, items: [item] });
     }
+    let failed = false;
     runs.forEach((run, r) => {
       if (r > 0) {   // 跨島（海上）以虛線連接
         const from = runs[r - 1].items[runs[r - 1].items.length - 1].point, to = run.items[0].point;
@@ -1503,9 +1624,13 @@ function drawRouteLines(zoom) {
         if (sea) L.polyline(sea, { color, weight: 4, opacity: .8, dashArray: '3 9', interactive: false }).addTo(markerLayer);
       }
       if (run.items.length < 2) return;
-      const road = roadFor(run.items);
-      if (!road) return;   // 道路讀取中或失敗時不畫直線，讀到道路才畫
-      const line = road;
+      const { data: road, waypointIndex } = roadFor(run.items, area);
+      if (!road) {
+        failed ||= road === false;
+        return;
+      }
+      if (runs.length === 1) positionRoutePoints(region, area, list, road, waypointIndex);
+      const line = road.line;
       L.polyline(line, { color, weight: 5, opacity: .9, interactive: false }).addTo(markerLayer);
       let sinceArrow = 90;
       for (let k = 0; k < line.length - 1; k++) {
@@ -1520,6 +1645,10 @@ function drawRouteLines(zoom) {
           html: '<svg viewBox="0 0 24 24" style="transform:rotate(' + deg + 'deg)" aria-hidden="true"><path d="M12 1.5 20 20 12 15.5 4 20Z"/></svg>' }) }).addTo(markerLayer);
       }
     });
+    if (failed !== unavailableRoads.has(region)) {
+      if (failed) unavailableRoads.add(region); else unavailableRoads.delete(region);
+      refreshRouteList();
+    }
   }
 }
 
@@ -1628,7 +1757,7 @@ function updateMap() {
   if (!map) return;
   activePoints = matches.filter(item => item.point && penghuBounds.contains(item.point));
   const area = state.quick || '全部';
-  byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
+  byId('map-status').textContent = area + '・' + activePoints.length + (isRouteSet() ? ' 個可定位路線點位' : ' 筆可定位店家');
   map.invalidateSize({ pan: false });
   updateZoomFloor();
   if (isRouteSet() && activePoints.length) {
@@ -1776,14 +1905,14 @@ async function loadRouteExtras() {
 }
 function deriveCombo(label) {
   const all = datasetCache.get('route') || [], out = datasetCache.get('routeOutlying') || [], extra = datasetCache.get('routeExtra') || {};
-  const byOrder = list => list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
-  const seven = ['七美鄉', byOrder(all.filter(i => i.region === '七美鄉'))];
+  const island = region => [region, listRoutePoints(all.filter(i => i.region === region && i.point), region)];
+  const seven = island('七美鄉');
   const harbor = (segment) => [segment, extra.maGong ? [routePoint('南海觀光碼頭', extra.maGong.lat, extra.maGong.lng, { village: '馬公市／光復里' })].filter(Boolean) : []];
   const noTown = list => list.map(i => ({ ...i, town: '', village: '', note: '', status: '', tags: [] }));
   const east = ['東吉嶼', noTown(out.filter(i => /東吉/.test(i.name) && i.point))], west = ['西吉嶼藍洞', noTown(out.filter(i => /西吉|藍洞/.test(i.name) && i.point))];
   const kind = comboLabels[label];
   let parts;
-  if (kind === 'two') parts = [harbor('南海碼頭起'), seven, ['望安鄉', byOrder(all.filter(i => i.region === '望安鄉'))], harbor('南海碼頭終')];
+  if (kind === 'two') parts = [harbor('南海碼頭起'), seven, island('望安鄉'), harbor('南海碼頭終')];
   else if (kind === 'four') parts = [harbor('南海碼頭起'), east, west, seven, harbor('南海碼頭終')];
   else if (kind === 'blue') parts = [harbor('南海碼頭起'), west, seven, harbor('南海碼頭終')];
   else {
@@ -1796,9 +1925,11 @@ function deriveCombo(label) {
     spots.sort((a, b) => ((ang(a) - base + 4 * Math.PI) % (2 * Math.PI)) - ((ang(b) - base + 4 * Math.PI) % (2 * Math.PI)));
     parts = [['吉貝', [port]], ['吉貝', spots], ['吉貝', [routePoint('吉貝碼頭', extra.jibeiPort.lat, extra.jibeiPort.lng, { village: '白沙鄉／吉貝村' })]]];
   }
-  const picked = parts.flatMap(([segment, list]) => list.map(item => ({ item, segment })));
-  return picked.map(({ item, segment }, k) => ({
-    ...item, id: item.id + '@' + kind + k, region: label, segment, order: k + 1,
+  const picked = parts.flatMap(([segment, list], segmentIndex) => list.map(item => ({ item, segment, segmentIndex })));
+  let order = 0;
+  return picked.map(({ item, segment, segmentIndex }, k) => ({
+    ...item, id: item.id + '@' + kind + k, region: label, segment, segmentIndex,
+    order: item.order || !['七美鄉', '望安鄉'].includes(segment) ? ++order : 0,
     role: k === 0 ? '起點' : k === picked.length - 1 ? '終點' : (/^(起點|終點)$/.test(item.role) ? '途經' : item.role)
   }));
 }
@@ -1851,8 +1982,9 @@ const DETAIL_SOURCES = {
     parse: ([name, lat, lng, desc]) => ({ name, lat, lng, data: { desc } }) },
   temple: { tabId: '2137991614', columns: 'C,D,G,H,J,L,N,O,P', required: 'C',
     parse: ([name, deity, lat, lng, pic, lanternTheme, lanternDates, lanternTime, lanternContent]) => ({ name, lat, lng, data: { deity, pic, lanternTheme, lanternDates, lanternTime, lanternContent } }) },
-  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,J,O', required: 'E',
-    parse: ([area, role, order, name, village, lat, lng, rule, status, note]) => ({ name, lat, lng, data: { area, role, order: Number(order) || 0, village, rule, status, note } }) }
+  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,J,M,O', required: 'E',
+    parse: ([area, role, order, name, village, lat, lng, rule, status, url, note]) => ({ name, lat, lng,
+      data: { area, role, order: Number(order) || 0, village, rule, status, url, note } }) }
 };
 async function loadDatasetDetails(key) {
   const source = DETAIL_SOURCES[key];
@@ -1888,25 +2020,21 @@ async function loadTripImages() {
   return byVendor;
 }
 
-// 只有起點、終點（同一地點）的環島路線：試算表沒填中間順序時，依「逆時針」由起點繞一圈自動排序，終點排最後
+// 環島主線以沿途地標約束道路走向。其他景點依主線里程顯示。
+const islandLoopStops = new Map([
+  ['七美鄉', ['七美燈塔', '望夫石', '月鯉灣', '龍埕海蝕平台', '小台灣', '雙心石滬']],
+  ['望安鄉', ['望安綠蠵龜觀光保育中心', '鴛鴦窟、藏軍洞', '天台山(呂洞賓足印)', '花宅聚落｜中社村', '網垵口沙灘']]
+]);
 function autoOrderLoopRoutes(items) {
-  const areas = new Map();
-  for (const item of items) {
-    if (!areas.has(item.region)) areas.set(item.region, []);
-    areas.get(item.region).push(item);
-  }
-  for (const list of areas.values()) {
+  for (const [area, list] of groupByRegion(items)) {
+    const names = islandLoopStops.get(area);
+    if (!names) continue;
     const fixed = list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
-    if (fixed.length < 2 || new Set(fixed.map(i => i.point.join(','))).size >= 3 || !/逆時針/.test(fixed[0].rule || '')) continue;
-    const cand = list.filter(i => !i.order && i.point && i.status === '主線候選');
-    if (!cand.length) continue;
-    const all = [fixed[0], ...cand];
-    const cLat = all.reduce((t, i) => t + i.point[0], 0) / all.length, cLng = all.reduce((t, i) => t + i.point[1], 0) / all.length;
-    const ang = i => Math.atan2(i.point[0] - cLat, i.point[1] - cLng);
-    const base = ang(fixed[0]), turn = i => (ang(i) - base + 4 * Math.PI) % (2 * Math.PI);
-    cand.sort((a, b) => turn(a) - turn(b));
-    cand.forEach((item, k) => { item.order = fixed[0].order + 1 + k; });
-    fixed[fixed.length - 1].order = fixed[0].order + cand.length + 1;
+    if (fixed.length !== 2 || fixed[0].point.join(',') !== fixed[1].point.join(',') || !/逆時針/.test(fixed[0].rule || '')) continue;
+    const available = new Map(list.filter(i => !i.order && i.point && i.status === '主線候選').map(i => [i.name, i]));
+    if (!names.every(name => available.has(name))) continue;
+    names.forEach((name, k) => { available.get(name).order = fixed[0].order + 1 + k; });
+    fixed[1].order = fixed[0].order + names.length + 1;
   }
 }
 
@@ -1917,10 +2045,16 @@ function mergeDetails(key, items, details) {
     if (Array.isArray(d)) d = d.shift();
     if (!d) continue;
     for (const [field, value] of Object.entries(d)) if (value !== '' && value != null && !item[field]) item[field] = value;
-    if (key === 'route') item.status = d.status || '';
-    if (key === 'route' && d.area) item.region = d.area;
-    if (key === 'route' && d.village) item.town = d.village.split('／')[0];
-    if (key === 'route') item.search += ' ' + searchable([d.area, d.role, d.village].join(' '));
+    if (key === 'route') {
+      item.region = d.area || item.region;
+      item.role = d.role;
+      item.order = d.order;
+      item.status = d.status;
+      item.town = d.village.split('／')[0];
+      item.sheetUrl = d.url || item.sheetUrl;
+      item.mapUrl = webUrl(item.sheetUrl) || item.mapUrl;
+      item.search += ' ' + searchable([d.area, d.role, d.village].join(' '));
+    }
   }
 }
 
@@ -1963,7 +2097,8 @@ async function switchDataset(key) {
       const result = await callBackend({ action: 'list', sheet: key, idToken: editor.token });
       if (!result.ok) throw new Error(result.error || '讀取失敗');
       const items = mapSheetData(key, result.rows);
-      if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
+      if (key === 'route') mergeDetails(key, items.sort((a, b) => a.row - b.row), await loadDatasetDetails(key));
+      else if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
       if (key === 'route') {
         // 路線排除離島：白沙（鳥嶼、姑婆嶼、吉貝、目斗、員貝、澎澎灘）、馬公（虎井、桶盤）、望安（東吉、西吉等離島支線）
         const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|將軍嶼|將軍澳|花嶼|東嶼坪|西嶼坪|貓嶼|頭巾|鐵砧|離島/;
@@ -1998,6 +2133,11 @@ async function switchDataset(key) {
   if (changed) rebuildQuickChips();
   byId('category-row').hidden = shown !== 'food';
   byId('results-title').textContent = shown === 'food' ? '美食推薦' : datasetLabel(shown);
+  byId('map-title').textContent = shown === 'route' ? '路線地圖' : shown === 'food' ? '美食地圖' : datasetLabel(shown) + '地圖';
+  document.querySelector('.search-caption').textContent = shown === 'route' ? '找景點' : '找店家';
+  const searchInput = byId('query');
+  searchInput.placeholder = shown === 'route' ? '景點、村里或路線' : '店名、餐點或地址';
+  searchInput.setAttribute('aria-label', shown === 'route' ? '搜尋路線景點、村里或路線' : '找店家，可搜尋店名、類別、餐點或地址');
   if (shown !== 'food' && state.category) {
     state.category = '';
     for (const chip of document.querySelectorAll('button[data-filter="category"]')) chip.setAttribute('aria-pressed', String(chip.dataset.value === ''));
@@ -2089,6 +2229,11 @@ byId('editor-save').addEventListener('click', async () => {
     item.point = [Number(lat.toFixed(7)), Number(lng.toFixed(7))];
     item.sheetUrl = url;
     item.mapUrl = url;
+    if (item.sheet === 'route') {
+      routePlacements.delete(item.region);
+      positionedRoads.delete(item.region);
+      comboCache.clear();
+    }
     item.tourismKm = Math.min(...cityTourism.anchors.map(anchor => distanceKm(item.point, anchor)));
     byId('editor').close();
     renderResults();
