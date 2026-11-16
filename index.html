@@ -1215,7 +1215,10 @@ function filterFood() {
   ).sort((a, b) => {
     if (dataset === 'speed') return (Number(a.no) || 9999) - (Number(b.no) || 9999) || a.row - b.row;
     if (isRouteSet() && state.sub === '南海二島(七美、望安)') return southSeaOrder(a.region) - southSeaOrder(b.region) || (a.order || 9999) - (b.order || 9999);
-    if (isRouteSet()) return String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
+    if (isRouteSet()) {
+      const rank = region => { const k = ['吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美、藍洞', '七美鄉', '望安鄉'].indexOf(region); return k < 0 ? 99 : k; };
+      return rank(a.region) - rank(b.region) || String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
+    }
     if (dataset === 'temple') return (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99) || Number(isOutlying(a)) - Number(isOutlying(b));
     return preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99);
   });
