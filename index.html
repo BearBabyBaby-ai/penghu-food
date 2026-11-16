@@ -109,6 +109,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .pin-icon.route-pin .pin-dot { --pin: #0b3954; font-size: 11px; }
   .route-arrow { background: none; border: none; pointer-events: none; }
   .route-arrow svg { width: 18px; height: 18px; fill: #fff; stroke: #0b3954; stroke-width: 2; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+  .popup-pic { display: block; width: 100%; max-height: 170px; object-fit: cover; border-radius: 8px; margin: 6px 0; background: #e8eef0; }
   .trip-block { margin-top: 8px; }
   .trip-name { margin: 0 0 4px; font-weight: 800; font-size: .85rem; }
   .trip-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
@@ -1000,6 +1001,14 @@ function markerContent(item) {
     header.append(edit);
   }
   card.append(header, element('span', 'badge badge-region', item.region + '・' + datasetLabel(item.sheet)), storeInfo(item));
+  if (item.pic) {
+    const picUrl = driveImage(item.pic) || (/^https?:\/\//.test(item.pic) ? item.pic : '');
+    if (picUrl) {
+      const pic = element('img', 'popup-pic');
+      pic.src = picUrl; pic.loading = 'lazy'; pic.alt = item.name; pic.referrerPolicy = 'no-referrer';
+      card.insertBefore(pic, card.children[1]);
+    }
+  }
   for (const trip of item.tripImages || []) {
     const block = element('div', 'trip-block');
     if (trip.trip) block.append(element('p', 'trip-name', trip.trip));
@@ -1420,12 +1429,12 @@ const DETAIL_SOURCES = {
     parse: ([type, no, name, lat, lng, speed, dir, items, tech, unit]) => ({ name, lat, lng, type, data: { no, speed, dir, items, tech, unit } }) },
   tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J', required: 'D',
     parse: ([name, dish, picks, phone, address, hours]) => ({ name, data: { dish, picks, phone, address, hours } }) },
-  spot: { tabId: '2085392869', columns: 'E,G,H,L', required: 'E',
-    parse: ([name, lat, lng, desc]) => ({ name, lat, lng, data: { desc } }) },
+  spot: { tabId: '2085392869', columns: 'E,G,H,J,L', required: 'E',
+    parse: ([name, lat, lng, pic, desc]) => ({ name, lat, lng, data: { pic, desc } }) },
   port: { tabId: '777001', columns: 'E,G,H,L', required: 'E',
     parse: ([name, lat, lng, desc]) => ({ name, lat, lng, data: { desc } }) },
-  temple: { tabId: '2137991614', columns: 'C,D,G,H,L,N,O,P', required: 'C',
-    parse: ([name, deity, lat, lng, lanternTheme, lanternDates, lanternTime, lanternContent]) => ({ name, lat, lng, data: { deity, lanternTheme, lanternDates, lanternTime, lanternContent } }) },
+  temple: { tabId: '2137991614', columns: 'C,D,G,H,J,L,N,O,P', required: 'C',
+    parse: ([name, deity, lat, lng, pic, lanternTheme, lanternDates, lanternTime, lanternContent]) => ({ name, lat, lng, data: { deity, pic, lanternTheme, lanternDates, lanternTime, lanternContent } }) },
   route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,O', required: 'E',
     parse: ([area, role, order, name, village, lat, lng, rule, note]) => ({ name, lat, lng, data: { area, role, order: Number(order) || 0, village, rule, note } }) }
 };
