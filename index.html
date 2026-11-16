@@ -584,13 +584,18 @@ const townKeywords = new Map([
   ['馬公', { regions: ['馬公市'] }], ['湖西', { regions: ['湖西鄉'] }], ['白沙', { regions: ['白沙鄉'] }],
   ['西嶼', { regions: ['西嶼鄉'] }], ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
 ]);
+const routeKeywords = new Map([
+  ['馬公市區', { regions: ['馬公市區'] }], ['北環島(白沙、西嶼)', { regions: ['北環島（白沙、西嶼）'] }],
+  ['南環島(澎南區域)', { regions: ['澎南區域（南環島）'] }], ['湖西(東環島)', { regions: ['湖西鄉（東環島）'] }],
+  ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
+]);
 const tideKeywords = ['奎壁山分海', '30天潮汐預報', '風浪天氣'];
 const tideModeOf = { '': 'all', '奎壁山分海': 'split', '30天潮汐預報': 'forecast', '風浪天氣': 'wx' };
 // 馬公、白沙的離島區域（廟宇清單排在最後）
 const outlyingTerms = { '馬公市': ['虎井', '桶盤'], '白沙鄉': ['姑婆', '員貝', '吉貝', '鳥嶼', '目斗'] };
 const isOutlying = item => (outlyingTerms[item.region] || []).some(term => item.location.includes(term));
-const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : [...townKeywords.keys()];
-const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : townKeywords.get(state.quick);
+const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : key === 'route' ? [...routeKeywords.keys()] : [...townKeywords.keys()];
+const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : dataset === 'route' ? routeKeywords.get(state.quick) : townKeywords.get(state.quick);
 function rebuildQuickChips() {
   state.quick = '';
   byId('quick-keywords').replaceChildren();
