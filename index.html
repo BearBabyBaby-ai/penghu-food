@@ -587,19 +587,20 @@ const townKeywords = new Map([
 const routeKeywords = new Map([
   ['馬公市區', { regions: ['馬公市區'] }], ['北環島(白沙、西嶼)', { regions: ['北環島（白沙、西嶼）'] }],
   ['南環島(澎南區域)', { regions: ['澎南區域（南環島）'] }], ['湖西(東環島)', { regions: ['湖西鄉（東環島）'] }],
-  ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
+  ['七美', { regions: ['七美鄉', '七美'] }], ['望安', { regions: ['望安鄉'] }]
 ]);
 const fullWidth = label => label.replace(/\(/g, '（').replace(/\)/g, '）');
 const islandKeywords = new Map(['吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美', '藍洞'].map(label => [label, { regions: [label, fullWidth(label)] }]));
 const isIslandRoute = item => [...islandKeywords.values()].some(p => p.regions.includes(item.region));
-const isRouteSet = () => dataset === 'route' || dataset === 'islandRoute';
+const isRouteSet = () => dataset === 'route';
+for (const [label, preset] of islandKeywords) if (label !== '七美') routeKeywords.set(label, preset);
 const tideKeywords = ['奎壁山分海', '30天潮汐預報', '風浪天氣'];
 const tideModeOf = { '': 'all', '奎壁山分海': 'split', '30天潮汐預報': 'forecast', '風浪天氣': 'wx' };
 // 馬公、白沙的離島區域（廟宇清單排在最後）
 const outlyingTerms = { '馬公市': ['虎井', '桶盤'], '白沙鄉': ['姑婆', '員貝', '吉貝', '鳥嶼', '目斗'] };
 const isOutlying = item => (outlyingTerms[item.region] || []).some(term => item.location.includes(term));
-const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : key === 'route' ? [...routeKeywords.keys()] : key === 'islandRoute' ? [...islandKeywords.keys()] : [...townKeywords.keys()];
-const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : dataset === 'route' ? routeKeywords.get(state.quick) : dataset === 'islandRoute' ? islandKeywords.get(state.quick) : townKeywords.get(state.quick);
+const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : key === 'route' ? [...routeKeywords.keys()] : [...townKeywords.keys()];
+const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : dataset === 'route' ? routeKeywords.get(state.quick) : townKeywords.get(state.quick);
 function rebuildQuickChips() {
   state.quick = '';
   byId('quick-keywords').replaceChildren();
@@ -641,7 +642,7 @@ const expandedRegions = new Set();
 // 電腦端登入後可切換修改的資料類別
 const datasets = new Map([
   ['food', '美食'], ['spot', '景點'], ['temple', '廟宇'], ['store', '其他店家'],
-  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線'], ['islandRoute', '離島路線'],
+  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線'],
   ['tide', '各地區潮汐']
 ]);
 let dataset = 'food';
@@ -1627,8 +1628,6 @@ try {
 
 function currentItems() {
   if (dataset === 'food') return food;
-  if (dataset === 'route') return (datasetCache.get('route') || []).filter(i => !isIslandRoute(i));
-  if (dataset === 'islandRoute') return (datasetCache.get('route') || []).filter(isIslandRoute);
   return datasetCache.get(dataset) || [];
 }
 
@@ -1759,8 +1758,7 @@ async function switchDataset(key) {
     window.penghuTideMode('all');
     return;
   }
-  const shown = key;                                   // 畫面上選的類別
-  if (key === 'islandRoute') key = 'route';             // 離島路線與路線讀同一份資料
+  const shown = key;
   if (shown === dataset && (key === 'food' || datasetCache.has(key))) return;
   for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === shown));
   if (key !== 'food' && !datasetCache.has(key)) {
