@@ -106,6 +106,11 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .map-credit a { display: block; margin-top: 3px; padding: 4px 7px; background: white; border: 1px solid #a9c5bd; border-radius: 6px; font-size: .72rem; }
   .pin-icon { border: none; background: none; }
   .pin-icon .pin-dot { position: absolute; inset: 0; display: grid; place-items: center; color: white; background: var(--pin); border: 2px solid white; border-radius: 50%; font-size: 10px; font-weight: 850; line-height: 1; box-shadow: 0 1px 5px #173a3b60; }
+  .pin-icon.speed-pin { overflow: visible; }
+  .pin-icon.speed-pin .pin-dot { --pin: #dc2626; }
+  .pin-icon .pin-dir { position: absolute; left: 14px; top: -12px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: grid; place-items: center; pointer-events: none; color: #dc2626; }
+  .pin-icon .pin-dir svg { width: 13px; height: 13px; fill: currentColor; transform: rotate(var(--dir)); }
+  .pin-icon .pin-limit { position: absolute; left: -2px; top: 17px; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid #dc2626; box-shadow: 0 2px 6px rgba(0,0,0,.3); display: grid; place-items: center; color: #111; font: 900 10px/1 system-ui, sans-serif; pointer-events: none; }
   .pin-icon.is-active .pin-dot { outline: 2px solid var(--navy); outline-offset: 1px; }
   .map-popup .leaflet-popup-content-wrapper { border-radius: 12px; }
   .map-popup .leaflet-popup-content { margin: 13px 15px; line-height: 1.45; }
@@ -741,6 +746,14 @@ function phoneValue(number) {
 function storeInfo(item) {
   const info = element('dl', 'details-grid');
   detailLine(info, '區域', item.region);
+  if (item.sheet === 'speed') {
+    detailLine(info, '類型', item.tags.join('・'));
+    detailLine(info, '速限', item.speed ? item.speed + ' 公里' : '');
+    detailLine(info, '拍攝方向', item.dir);
+    detailLine(info, '取締項目', item.items);
+    detailLine(info, '管轄分局', item.unit);
+    return info;
+  }
   if (item.tags.length || item.subtype) {
     const categories = element('div', 'badges');
     categories.append(...item.tags.map(categoryBadge));
@@ -1018,11 +1031,18 @@ function renderMarkers() {
       points.reduce((sum, p) => sum + p.point[0], 0) / points.length,
       points.reduce((sum, p) => sum + p.point[1], 0) / points.length
     ] : item.point;
+    const isSpeed = !isGroup && item.sheet === 'speed';
+    const speedDeg = isSpeed ? directionDeg(item.dir) : null;
+    const speedHtml = isSpeed
+      ? '<span class="pin-dot">速</span>' +
+        (speedDeg === null ? '' : '<span class="pin-dir" style="--dir:' + speedDeg + 'deg" title="' + item.dir + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5 20 10.5H14.5V22.5H9.5V10.5H4Z"/></svg></span>') +
+        (item.speed ? '<span class="pin-limit" title="速限 ' + item.speed + '">' + item.speed + '</span>' : '')
+      : '';
     const marker = L.marker(location, {
       icon: L.divIcon({
-        className: 'pin-icon' + (isActive ? ' is-active' : ''),
-        html: '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : '') + '</span>',
-        iconSize: [size, size]
+        className: 'pin-icon' + (isActive ? ' is-active' : '') + (isSpeed ? ' speed-pin' : ''),
+        html: isSpeed ? speedHtml : '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : '') + '</span>',
+        iconSize: isSpeed ? [24, 24] : [size, size]
       }),
       title: isGroup ? markerTitle : '',
       zIndexOffset: isActive ? 1000 : 0,
@@ -1253,6 +1273,26 @@ function currentItems() {
   return dataset === 'food' ? food : (datasetCache.get(dataset) || []);
 }
 
+// 拍攝方向「東南向西北」換成箭頭角度（北 0°、順時針）
+function directionDeg(text) {
+  const m = String(text || '').replace(/\s/g, '').match(/^([東西南北]{1,2})[向往]([東西南北]{1,2})$/);
+  if (!m) return null;
+  const v = { 東: [1, 0], 西: [-1, 0], 南: [0, -1], 北: [0, 1] };
+  const [x, y] = [...m[2]].reduce((a, c) => [a[0] + v[c][0], a[1] + v[c][1]], [0, 0]);
+  return x || y ? Math.round(Math.atan2(x, y) * 180 / Math.PI) : null;
+}
+
+// 測速執法的速限、拍攝方向等欄位，從公開的試算表分頁補上
+async function loadSpeedDetails() {
+  const rows = await fetchSheetRows({ tabId: '777020', columns: 'C,E,F,G,H,I,K', requiredColumn: 'C' });
+  const details = new Map();
+  for (const row of rows) {
+    const [name, lat, lng, speed, dir, items, unit] = Array.from({ length: 7 }, (_, col) => sheetCellText(row?.c?.[col]));
+    details.set(name + '|' + Number(lat) + '|' + Number(lng), { speed, dir, items, unit });
+  }
+  return details;
+}
+
 function mapSheetData(key, rows) {
   return rows.map(r => {
     const point = coordinates(r.lat, r.lng);
@@ -1281,7 +1321,15 @@ async function switchDataset(key) {
       if (!editorValid()) throw new Error('登入已過期，請重新登入');
       const result = await callBackend({ action: 'list', sheet: key, idToken: editor.token });
       if (!result.ok) throw new Error(result.error || '讀取失敗');
-      datasetCache.set(key, mapSheetData(key, result.rows));
+      const items = mapSheetData(key, result.rows);
+      if (key === 'speed') {
+        const details = await loadSpeedDetails().catch(() => new Map());
+        for (const item of items) {
+          const d = item.point && details.get(item.name + '|' + item.point[0] + '|' + item.point[1]);
+          if (d) Object.assign(item, d);
+        }
+      }
+      datasetCache.set(key, items);
     } catch (error) {
       byId('results-count').textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
       for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === dataset));
