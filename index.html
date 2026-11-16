@@ -1420,19 +1420,6 @@ function drawRouteLines(zoom) {
     list.sort((a, b) => a.order - b.order);
     const color = palette[index++ % palette.length];
     if (list.length < 2) continue;
-    // 只有起點、終點（同一地點）的環島路線：中間未指定順序的主線景點，依規則的逆時針方向由起點繞一圈
-    const distinct = new Set(list.map(i => i.point[0] + ',' + i.point[1])).size;
-    if (distinct < 3 && /逆時針/.test(list[0].rule || '')) {
-      const cand = activePoints.filter(i => i.region === list[0].region && !i.order && i.status === '主線候選');
-      if (cand.length) {
-        const all = [list[0], ...cand];
-        const cLat = all.reduce((t, i) => t + i.point[0], 0) / all.length, cLng = all.reduce((t, i) => t + i.point[1], 0) / all.length;
-        const ang = i => Math.atan2(i.point[0] - cLat, i.point[1] - cLng);
-        const base = ang(list[0]), turn = i => (ang(i) - base + 4 * Math.PI) % (2 * Math.PI);
-        cand.sort((a, b) => turn(a) - turn(b));
-        list.splice(1, 0, ...cand);
-      }
-    }
     const road = roadFor(list);
     const line = road || list.map(i => i.point);   // 道路讀取中或失敗時，先用控制點直線連接
     L.polyline(line, { color, weight: 5, opacity: road ? .9 : .45, dashArray: road ? null : '6 8', interactive: false }).addTo(markerLayer);
@@ -1695,6 +1682,28 @@ async function loadTripImages() {
   return byVendor;
 }
 
+// 只有起點、終點（同一地點）的環島路線：試算表沒填中間順序時，依「逆時針」由起點繞一圈自動排序，終點排最後
+function autoOrderLoopRoutes(items) {
+  const areas = new Map();
+  for (const item of items) {
+    if (!areas.has(item.region)) areas.set(item.region, []);
+    areas.get(item.region).push(item);
+  }
+  for (const list of areas.values()) {
+    const fixed = list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
+    if (fixed.length < 2 || new Set(fixed.map(i => i.point.join(','))).size >= 3 || !/逆時針/.test(fixed[0].rule || '')) continue;
+    const cand = list.filter(i => !i.order && i.point && i.status === '主線候選');
+    if (!cand.length) continue;
+    const all = [fixed[0], ...cand];
+    const cLat = all.reduce((t, i) => t + i.point[0], 0) / all.length, cLng = all.reduce((t, i) => t + i.point[1], 0) / all.length;
+    const ang = i => Math.atan2(i.point[0] - cLat, i.point[1] - cLng);
+    const base = ang(fixed[0]), turn = i => (ang(i) - base + 4 * Math.PI) % (2 * Math.PI);
+    cand.sort((a, b) => turn(a) - turn(b));
+    cand.forEach((item, k) => { item.order = fixed[0].order + 1 + k; });
+    fixed[fixed.length - 1].order = fixed[0].order + cand.length + 1;
+  }
+}
+
 function mergeDetails(key, items, details) {
   for (const item of items) {
     const typeKey = key === 'speed' ? '|' + (item.tags[0] || '') : '';
@@ -1748,6 +1757,7 @@ async function switchDataset(key) {
       if (!result.ok) throw new Error(result.error || '讀取失敗');
       const items = mapSheetData(key, result.rows);
       if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
+      if (key === 'route') autoOrderLoopRoutes(items);
       if (key === 'tour') {
         const images = await loadTripImages().catch(() => new Map());
         // 業者名稱可簡寫：行程圖資寫「和慶」也對得上「和慶遊艇」
