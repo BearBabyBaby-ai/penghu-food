@@ -1142,7 +1142,7 @@ function groupByRegion(items) {
 function renderResults() {
   const root = byId('results');
   const groups = dataset === 'speed' ? new Map([['測速與科技執法', matches]]) : groupByRegion(matches);
-  byId('results-count').textContent = '共 ' + matches.length + ' 筆';
+  byId('results-count').textContent = '共 ' + (isRouteSet() ? groups.size : matches.length) + ' 筆';   // 路線：筆數 = 路線數
   root.replaceChildren();
   root.scrollTop = 0;
   if (!groups.size) {
@@ -1802,6 +1802,11 @@ function currentItems() {
   if (dataset === 'route' && state.quick === '離島路線' && comboLabels[state.sub]) {
     const key = state.sub + '|' + (datasetCache.get('route') || []).length + '|' + (datasetCache.has('routeExtra') ? 1 : 0);
     if (!comboCache.has(key)) comboCache.set(key, deriveCombo(state.sub));
+    return comboCache.get(key);
+  }
+  if (dataset === 'route' && !state.quick) {   // 路線全部：一般路線＋所有離島路線
+    const key = 'every|' + (datasetCache.get('route') || []).length + '|' + (datasetCache.has('routeExtra') ? 1 : 0);
+    if (!comboCache.has(key)) comboCache.set(key, [...(datasetCache.get('route') || []), ...Object.keys(comboLabels).flatMap(label => deriveCombo(label))]);
     return comboCache.get(key);
   }
   if (dataset === 'route' && state.quick === '離島路線' && !state.sub) {   // 全部：所有離島路線（吉貝、南海二島、南方四島、七美、藍洞）加上單七美、單望安
