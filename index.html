@@ -1205,7 +1205,6 @@ function renderResults() {
   }
 }
 const foldedRegions = new Set();
-window.addEventListener('load', () => { let timer = 0; byId('results').addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(syncMapToList, 120); }); });
 
 function filterFood() {
   const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
@@ -1290,8 +1289,10 @@ function clusterContent(items) {
   return content;
 }
 
+let lastProgrammatic = 0;
 function fitPoints(points, maxZoom) {
   if (!map || !points.length) return;
+  lastProgrammatic = Date.now();
   map.fitBounds(points.map(item => item.point), { maxZoom, padding: [38, 38], animate: false });
 }
 
@@ -1321,6 +1322,7 @@ function focusCard(item) {
 function selectPoint(item) {
   if (!map || !activePoints.includes(item)) return;
   focusCard(item);
+  lastProgrammatic = Date.now();
   map.setView(item.point, 21, { animate: false });
   renderMarkers();
   drawnMarkers.get(item.id)?.openPopup();
@@ -1407,6 +1409,7 @@ function renderMarkers() {
     marker.on('click', () => {
       if (expands) {
         fitPoints(points, samePlace ? 14 : Math.min(18, zoom + 2));
+        lastProgrammatic = Date.now();
         if (map.getZoom() <= zoom) map.setView(location, zoom + 1, { animate: false });
         return;
       }
@@ -1525,6 +1528,7 @@ function updateZoomFloor() {
 }
 
 function showOverview() {
+  lastProgrammatic = Date.now();
   map.fitBounds(penghuBounds, { padding: [overviewPadding, overviewPadding], animate: false });
 }
 
@@ -1556,6 +1560,7 @@ function initializeMap() {
 
   markerLayer = L.layerGroup().addTo(map);
   map.on('zoomend', renderMarkers);
+  map.on('moveend', syncListToMap);
   map.on('resize', () => {
     const wasOverview = map.getZoom() <= map.getMinZoom();
     updateZoomFloor();
@@ -1563,26 +1568,22 @@ function initializeMap() {
   });
 }
 
-// 路線：清單捲到哪個區域，地圖就同步對準那個區域
-function routeGroupPoints() {
+// 路線：地圖目前集中在哪個區域，左側清單就跳到對應的區域
+function syncListToMap() {
+  if (!isRouteSet() || !map || Date.now() - lastProgrammatic < 400) return;
+  const bounds = map.getBounds(), center = map.getCenter();
+  const score = new Map();
+  for (const item of activePoints) {
+    const entry = score.get(item.region) || { inside: 0, near: Infinity };
+    if (bounds.contains(item.point)) entry.inside++;
+    entry.near = Math.min(entry.near, Math.hypot(item.point[0] - center.lat, item.point[1] - center.lng));
+    score.set(item.region, entry);
+  }
+  let best = '', top = null;
+  for (const [region, e] of score) if (!top || e.inside > top.inside || (e.inside === top.inside && e.near < top.near)) { best = region; top = e; }
   const root = byId('results');
-  const groups = [...root.querySelectorAll('.group')];
-  if (!groups.length) return activePoints;
-  const top = root.getBoundingClientRect().top + 8;
-  let current = groups[0];
-  for (const g of groups) if (g.getBoundingClientRect().bottom > top + 20) { current = g; break; }
-  const region = current.querySelector('.group-title span')?.textContent;
-  const list = activePoints.filter(i => i.region === region);
-  return list.length ? list : activePoints;
-}
-let syncedRegion = '';
-function syncMapToList() {
-  if (!isRouteSet() || !map) return;
-  const points = routeGroupPoints();
-  const region = points[0]?.region || '';
-  if (region === syncedRegion) return;
-  syncedRegion = region;
-  fitPoints(points, 15);
+  const group = [...root.querySelectorAll('.group')].find(g => g.querySelector('.group-title span')?.textContent === best);
+  if (group) root.scrollTop += group.getBoundingClientRect().top - root.getBoundingClientRect().top;
 }
 function updateMap() {
   if (!desktop.matches) return;
@@ -1593,11 +1594,7 @@ function updateMap() {
   byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
   map.invalidateSize({ pan: false });
   updateZoomFloor();
-  if (isRouteSet() && activePoints.length) {
-    const gp = routeGroupPoints();
-    syncedRegion = gp[0]?.region || '';
-    fitPoints(gp, 15);   // 路線：地圖對準清單目前看到的區域
-  } else if (activePoints.length && (state.quick || byId('query').value.trim())) {
+  if (activePoints.length && (state.quick || byId('query').value.trim())) {
     fitPoints(activePoints, 15);
   } else {
     showOverview();
