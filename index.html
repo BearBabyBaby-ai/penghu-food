@@ -1672,7 +1672,7 @@ async function loadRouteExtras() {
   const ports = await fetchSheetRows({ tabId: '777001', columns: 'B,E,G,H', requiredColumn: 'E' });
   const spots = await fetchSheetRows({ tabId: '2085392869', columns: 'B,E,G,H', requiredColumn: 'E' });
   const find = pattern => ports.map(r => ({ name: text(cellOf(r, 1)), lat: cellOf(r, 2)?.v, lng: cellOf(r, 3)?.v })).find(r => pattern.test(r.name));
-  const maGong = find(/馬公碼頭區|^馬公港$/), jibeiPort = find(/^吉貝碼頭$|^吉貝港$/);
+  const maGong = find(/^南海觀光碼頭$/), jibeiPort = find(/^吉貝碼頭$|^吉貝港$/);
   const jibei = spots.map(r => ({ village: text(cellOf(r, 0)), name: text(cellOf(r, 1)), lat: cellOf(r, 2)?.v, lng: cellOf(r, 3)?.v }))
     .filter(r => r.village === '吉貝村' && !/目斗|姑婆|鐵砧|險礁/.test(r.name));
   return { maGong, jibeiPort, jibei };
@@ -1681,13 +1681,13 @@ function deriveCombo(label) {
   const all = datasetCache.get('route') || [], out = datasetCache.get('routeOutlying') || [], extra = datasetCache.get('routeExtra') || {};
   const byOrder = list => list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
   const seven = ['七美鄉', byOrder(all.filter(i => i.region === '七美鄉'))];
-  const harbor = (segment) => [segment, extra.maGong ? [routePoint('馬公港', extra.maGong.lat, extra.maGong.lng, { village: '馬公市' })].filter(Boolean) : []];
+  const harbor = (segment) => [segment, extra.maGong ? [routePoint('南海觀光碼頭', extra.maGong.lat, extra.maGong.lng, { village: '馬公市／光復里' })].filter(Boolean) : []];
   const east = ['東吉嶼', out.filter(i => /東吉/.test(i.name) && i.point)], west = ['西吉嶼藍洞', out.filter(i => /西吉|藍洞/.test(i.name) && i.point)];
   const kind = comboLabels[label];
   let parts;
-  if (kind === 'two') parts = [seven, ['望安鄉', byOrder(all.filter(i => i.region === '望安鄉'))]];
-  else if (kind === 'four') parts = [harbor('馬公港起'), east, west, seven, harbor('馬公港終')];
-  else if (kind === 'blue') parts = [harbor('馬公港起'), west, seven, harbor('馬公港終')];
+  if (kind === 'two') parts = [harbor('南海碼頭起'), seven, ['望安鄉', byOrder(all.filter(i => i.region === '望安鄉'))], harbor('南海碼頭終')];
+  else if (kind === 'four') parts = [harbor('南海碼頭起'), east, west, seven, harbor('南海碼頭終')];
+  else if (kind === 'blue') parts = [harbor('南海碼頭起'), west, seven, harbor('南海碼頭終')];
   else {
     // 吉貝：由吉貝碼頭出發，依逆時針繞島，再回到吉貝碼頭
     const port = extra.jibeiPort && routePoint('吉貝碼頭', extra.jibeiPort.lat, extra.jibeiPort.lng, { village: '白沙鄉／吉貝村' });
