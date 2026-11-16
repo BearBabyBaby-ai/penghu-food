@@ -767,6 +767,8 @@ function storeInfo(item) {
     }
     detailLine(info, '類別', categories);
   }
+  detailLine(info, '主祀', item.deity);
+  detailLine(info, '簡易說明', item.desc);
   detailLine(info, '餐食／服務', item.dish);
   detailLine(info, '推薦', item.picks);
   detailLine(info, '地址', item.address);
@@ -820,8 +822,6 @@ function createCard(item) {
   if (item.sheet === 'route') {
     if (item.role) badges.append(element('span', 'badge badge-role', item.role));
     if (item.village) badges.append(element('span', 'badge badge-region', item.village));
-  } else if (item.sheet !== 'speed') {
-    badges.append(element('span', 'badge badge-region', item.region));
   }
   if (item.island) badges.append(element('span', 'badge badge-island', '離島（' + item.island + '）'));
   badges.append(...item.tags.map(categoryBadge));
@@ -834,7 +834,7 @@ function createCard(item) {
   // 第一行：三欄配置 (店名 │ 類別 │ 導航)
   const top = element('div', 'card-top card-name-line');
   const townLeft = item.sheet === 'speed';
-  top.style.gridTemplateColumns = (townLeft ? 'auto ' : '') + 'auto minmax(0, 1fr) auto' + (editor ? ' auto' : '');
+  top.style.gridTemplateColumns = (townLeft ? 'auto ' : '') + 'minmax(0, max-content) minmax(max-content, 1fr) auto' + (editor ? ' auto' : '');
   if (townLeft) top.append(element('span', 'badge badge-region', item.region));
   top.append(name, badges);
   if (item.mapUrl) top.append(go);
@@ -858,6 +858,14 @@ function createCard(item) {
     l1.append(cardField('鄉市／村里', item.village, 'village'), cardField('順序', item.order ? '第 ' + item.order + ' 點' : '', 'order'));
     card.append(l1);
     if (item.note) card.append(cardField('備註', item.note, 'note'));
+  }
+
+  if (item.deity) card.append(cardField('主祀', item.deity, 'deity'));
+  if (item.desc) card.append(cardField('簡易說明', item.desc, 'desc'));
+  if (item.history) card.append(cardField('廟宇史蹟', item.history, 'history'));
+  if (item.legend) card.append(cardField('傳說', item.legend, 'legend'));
+  if (item.lanternTheme || item.lanternDates || item.lanternContent) {
+    card.append(cardField('元宵', [item.lanternTheme, item.lanternDates, item.lanternTime, item.lanternContent].filter(Boolean).join('｜'), 'lantern'));
   }
 
   // 第二行：雙欄配置 (代表餐食 │ 推薦)
@@ -1131,7 +1139,28 @@ function renderMarkers() {
   drawRouteLines(zoom);
 }
 
-// 路線：依控制點順序，從起點沿途連到終點，線上加方向箭頭（控制點連線，道路未核對）
+// 路線：依控制點順序，沿實際道路從起點連到終點，線上加方向箭頭
+const roadCache = new Map();
+function roadFor(list) {
+  const coords = list.map(i => i.point[1].toFixed(6) + ',' + i.point[0].toFixed(6)).join(';');
+  const walking = list.some(i => /步行/.test([i.rule, i.note].join(' ')));
+  const cacheKey = (walking ? 'foot|' : 'car|') + coords;
+  if (!roadCache.has(cacheKey)) {
+    roadCache.set(cacheKey, null);
+    const base = walking ? 'https://routing.openstreetmap.de/routed-foot/' : 'https://routing.openstreetmap.de/routed-car/';
+    fetch(base + 'route/v1/driving/' + coords + '?overview=full&geometries=geojson&continue_straight=false')
+      .then(r => r.json())
+      .then(data => {
+        const line = data?.routes?.[0]?.geometry?.coordinates;
+        if (!line?.length) throw new Error('no route');
+        roadCache.set(cacheKey, line.map(([lng, lat]) => [lat, lng]));
+        if (dataset === 'route') renderMarkers();
+      })
+      .catch(() => roadCache.set(cacheKey, false));
+  }
+  return roadCache.get(cacheKey);
+}
+
 function drawRouteLines(zoom) {
   if (dataset !== 'route') return;
   const byArea = new Map();
@@ -1144,12 +1173,18 @@ function drawRouteLines(zoom) {
   for (const list of byArea.values()) {
     list.sort((a, b) => a.order - b.order);
     const color = palette[index++ % palette.length];
-    const line = list.map(i => i.point);
-    if (line.length < 2) continue;
-    L.polyline(line, { color, weight: 4, opacity: .85, interactive: false }).addTo(markerLayer);
+    if (list.length < 2) continue;
+    const road = roadFor(list);
+    const line = road || list.map(i => i.point);   // 道路讀取中或失敗時，先用控制點直線連接
+    L.polyline(line, { color, weight: 5, opacity: road ? .9 : .45, dashArray: road ? null : '6 8', interactive: false }).addTo(markerLayer);
+    if (!road) continue;
+    let sinceArrow = 90;
     for (let k = 0; k < line.length - 1; k++) {
       const a = map.project(line[k], zoom), b = map.project(line[k + 1], zoom);
-      if (Math.hypot(b.x - a.x, b.y - a.y) < 46) continue;
+      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      sinceArrow += length;
+      if (sinceArrow < 120 || length < 4) continue;
+      sinceArrow = 0;
       const deg = Math.round(Math.atan2(b.x - a.x, -(b.y - a.y)) * 180 / Math.PI);
       const mid = [(line[k][0] + line[k + 1][0]) / 2, (line[k][1] + line[k + 1][1]) / 2];
       L.marker(mid, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'route-arrow', iconSize: [18, 18],
@@ -1214,7 +1249,7 @@ function updateMap() {
   if (!map) return;
   activePoints = matches.filter(item => item.point && penghuBounds.contains(item.point));
   const area = state.quick || '全部';
-  byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家' + (dataset === 'route' ? '・路線依控制點順序連線，道路未核對' : '');
+  byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
   map.invalidateSize({ pan: false });
   updateZoomFloor();
   if (activePoints.length && (state.quick || byId('query').value.trim())) {
@@ -1349,28 +1384,34 @@ function directionDeg(text) {
 
 // 測速、行程業者、路線的完整欄位，從公開的試算表分頁補上（修改仍走原本的寫回流程）
 const DETAIL_SOURCES = {
-  speed: { tabId: '777020', columns: 'B,C,E,F,G,H,I,J,K',
-    parse: ([no, name, lat, lng, speed, dir, items, tech, unit]) => ({ key: name + '|' + Number(lat) + '|' + Number(lng), data: { no, speed, dir, items, tech, unit } }) },
-  tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J',
-    parse: ([name, dish, picks, phone, address, hours]) => ({ key: name, data: { dish, picks, phone, address, hours } }) },
-  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,O',
-    parse: ([area, role, order, name, village, lat, lng, rule, note]) => ({ key: name + '|' + Number(lat) + '|' + Number(lng), data: { area, role, order: Number(order) || 0, village, rule, note } }) }
+  speed: { tabId: '777020', columns: 'B,C,E,F,G,H,I,J,K', required: 'C',
+    parse: ([no, name, lat, lng, speed, dir, items, tech, unit]) => ({ name, lat, lng, data: { no, speed, dir, items, tech, unit } }) },
+  tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J', required: 'D',
+    parse: ([name, dish, picks, phone, address, hours]) => ({ name, data: { dish, picks, phone, address, hours } }) },
+  spot: { tabId: '2085392869', columns: 'E,G,H,L,M', required: 'E',
+    parse: ([name, lat, lng, desc, legend]) => ({ name, lat, lng, data: { desc, legend } }) },
+  port: { tabId: '777001', columns: 'E,G,H,L,M', required: 'E',
+    parse: ([name, lat, lng, desc, legend]) => ({ name, lat, lng, data: { desc, legend } }) },
+  temple: { tabId: '2137991614', columns: 'C,D,G,H,L,N,O,P,R,S', required: 'C',
+    parse: ([name, deity, lat, lng, lanternTheme, lanternDates, lanternTime, lanternContent, history, legend]) => ({ name, lat, lng, data: { deity, lanternTheme, lanternDates, lanternTime, lanternContent, history, legend } }) },
+  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,O', required: 'E',
+    parse: ([area, role, order, name, village, lat, lng, rule, note]) => ({ name, lat, lng, data: { area, role, order: Number(order) || 0, village, rule, note } }) }
 };
 async function loadDatasetDetails(key) {
   const source = DETAIL_SOURCES[key];
-  const rows = await fetchSheetRows({ tabId: source.tabId, columns: source.columns, requiredColumn: { speed: 'C', tour: 'D', route: 'E' }[key] });
-  const details = new Map();
+  const rows = await fetchSheetRows({ tabId: source.tabId, columns: source.columns, requiredColumn: source.required });
+  const full = new Map(), byName = new Map();
   for (const row of rows) {
     const cells = Array.from({ length: source.columns.split(',').length }, (_, col) => String(row?.c?.[col]?.v ?? row?.c?.[col]?.f ?? '').trim());
-    const { key: k, data } = source.parse(cells);
-    details.set(k, data);
+    const { name, lat, lng, data } = source.parse(cells);
+    if (lat !== undefined) full.set(name + '|' + Number(lat) + '|' + Number(lng), data);
+    byName.set(name, byName.has(name) ? null : data);   // 同名重複的不用名稱比對
   }
-  return details;
+  return { full, byName };
 }
 function mergeDetails(key, items, details) {
   for (const item of items) {
-    const k = key === 'tour' ? item.name : (item.point ? item.name + '|' + item.point[0] + '|' + item.point[1] : '');
-    const d = details.get(k);
+    const d = (item.point && details.full.get(item.name + '|' + item.point[0] + '|' + item.point[1])) || details.byName.get(item.name);
     if (!d) continue;
     for (const [field, value] of Object.entries(d)) if (value !== '' && value != null && !item[field]) item[field] = value;
     if (key === 'route' && d.area) item.region = d.area;
@@ -1407,7 +1448,7 @@ async function switchDataset(key) {
       const result = await callBackend({ action: 'list', sheet: key, idToken: editor.token });
       if (!result.ok) throw new Error(result.error || '讀取失敗');
       const items = mapSheetData(key, result.rows);
-      if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => new Map()));
+      if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
       datasetCache.set(key, items);
     } catch (error) {
       byId('results-count').textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
