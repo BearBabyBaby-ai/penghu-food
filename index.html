@@ -1420,6 +1420,19 @@ function drawRouteLines(zoom) {
     list.sort((a, b) => a.order - b.order);
     const color = palette[index++ % palette.length];
     if (list.length < 2) continue;
+    // 只有起點、終點（同一地點）的環島路線：中間未指定順序的主線景點，依規則的逆時針方向由起點繞一圈
+    const distinct = new Set(list.map(i => i.point[0] + ',' + i.point[1])).size;
+    if (distinct < 3 && /逆時針/.test(list[0].rule || '')) {
+      const cand = activePoints.filter(i => i.region === list[0].region && !i.order && i.status === '主線候選');
+      if (cand.length) {
+        const all = [list[0], ...cand];
+        const cLat = all.reduce((t, i) => t + i.point[0], 0) / all.length, cLng = all.reduce((t, i) => t + i.point[1], 0) / all.length;
+        const ang = i => Math.atan2(i.point[0] - cLat, i.point[1] - cLng);
+        const base = ang(list[0]), turn = i => (ang(i) - base + 4 * Math.PI) % (2 * Math.PI);
+        cand.sort((a, b) => turn(a) - turn(b));
+        list.splice(1, 0, ...cand);
+      }
+    }
     const road = roadFor(list);
     const line = road || list.map(i => i.point);   // 道路讀取中或失敗時，先用控制點直線連接
     L.polyline(line, { color, weight: 5, opacity: road ? .9 : .45, dashArray: road ? null : '6 8', interactive: false }).addTo(markerLayer);
@@ -1645,8 +1658,8 @@ const DETAIL_SOURCES = {
     parse: ([name, lat, lng, desc]) => ({ name, lat, lng, data: { desc } }) },
   temple: { tabId: '2137991614', columns: 'C,D,G,H,J,L,N,O,P', required: 'C',
     parse: ([name, deity, lat, lng, pic, lanternTheme, lanternDates, lanternTime, lanternContent]) => ({ name, lat, lng, data: { deity, pic, lanternTheme, lanternDates, lanternTime, lanternContent } }) },
-  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,O', required: 'E',
-    parse: ([area, role, order, name, village, lat, lng, rule, note]) => ({ name, lat, lng, data: { area, role, order: Number(order) || 0, village, rule, note } }) }
+  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,J,O', required: 'E',
+    parse: ([area, role, order, name, village, lat, lng, rule, status, note]) => ({ name, lat, lng, data: { area, role, order: Number(order) || 0, village, rule, status, note } }) }
 };
 async function loadDatasetDetails(key) {
   const source = DETAIL_SOURCES[key];
@@ -1655,7 +1668,11 @@ async function loadDatasetDetails(key) {
   for (const row of rows) {
     const cells = Array.from({ length: source.columns.split(',').length }, (_, col) => String(row?.c?.[col]?.v ?? row?.c?.[col]?.f ?? '').trim());
     const { name, lat, lng, type, data } = source.parse(cells);
-    if (lat !== undefined) full.set(name + '|' + Number(lat) + '|' + Number(lng) + (type !== undefined ? '|' + type : ''), data);
+    if (lat !== undefined) {
+      const key = name + '|' + Number(lat) + '|' + Number(lng) + (type !== undefined ? '|' + type : '');
+      if (source === DETAIL_SOURCES.route) full.set(key, [...(full.get(key) || []), data]);   // 起點與終點同一地點：依列順序各取各的
+      else full.set(key, data);
+    }
     byName.set(name, byName.has(name) ? null : data);   // 同名重複的不用名稱比對
   }
   return { full, byName };
@@ -1681,9 +1698,11 @@ async function loadTripImages() {
 function mergeDetails(key, items, details) {
   for (const item of items) {
     const typeKey = key === 'speed' ? '|' + (item.tags[0] || '') : '';
-    const d = (item.point && details.full.get(item.name + '|' + item.point[0] + '|' + item.point[1] + typeKey)) || (key === 'speed' ? null : details.byName.get(item.name));
+    let d = (item.point && details.full.get(item.name + '|' + item.point[0] + '|' + item.point[1] + typeKey)) || (key === 'speed' ? null : details.byName.get(item.name));
+    if (Array.isArray(d)) d = d.shift();
     if (!d) continue;
     for (const [field, value] of Object.entries(d)) if (value !== '' && value != null && !item[field]) item[field] = value;
+    if (key === 'route') item.status = d.status || '';
     if (key === 'route' && d.area) item.region = d.area;
     if (key === 'route' && d.village) item.town = d.village.split('／')[0];
     if (key === 'route') item.search += ' ' + searchable([d.area, d.role, d.village].join(' '));
