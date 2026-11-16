@@ -1427,6 +1427,33 @@ function roadFor(list) {
   return roadCache.get(cacheKey);
 }
 
+// 海上航道：從 OpenStreetMap 抓取實際渡輪航道（route=ferry），抓不到的路段才用直線虛線
+let ferryWays = null;
+function loadFerryWays() {
+  if (ferryWays) return;
+  ferryWays = [];
+  const q = '[out:json][timeout:25];way["route"="ferry"](22.9,119.2,23.9,119.9);out geom;';
+  fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(data => {
+      ferryWays = (data.elements || []).filter(e => e.geometry?.length > 1).map(e => e.geometry.map(g => [g.lat, g.lon]));
+      if (isRouteSet() && ferryWays.length) renderMarkers();
+    })
+    .catch(() => {});
+}
+function seaFor(from, to) {
+  loadFerryWays();
+  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  let best = null, bestCost = 0.06;
+  for (const way of ferryWays) {
+    for (const line of [way, [...way].reverse()]) {
+      const cost = d(line[0], from) + d(line[line.length - 1], to);
+      if (cost < bestCost) { bestCost = cost; best = line; }
+    }
+  }
+  return best ? [from, ...best, to] : null;
+}
+
 function drawRouteLines(zoom) {
   if (!isRouteSet()) return;
   const byArea = new Map();
@@ -1448,7 +1475,8 @@ function drawRouteLines(zoom) {
     runs.forEach((run, r) => {
       if (r > 0) {   // 跨島（海上）以虛線連接
         const from = runs[r - 1].items[runs[r - 1].items.length - 1].point, to = run.items[0].point;
-        L.polyline([from, to], { color, weight: 3, opacity: .6, dashArray: '3 9', interactive: false }).addTo(markerLayer);
+        const sea = seaFor(from, to);
+        L.polyline(sea || [from, to], { color, weight: sea ? 4 : 3, opacity: sea ? .8 : .6, dashArray: '3 9', interactive: false }).addTo(markerLayer);
       }
       if (run.items.length < 2) return;
       const road = roadFor(run.items);
@@ -1847,7 +1875,7 @@ async function switchDataset(key) {
       if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
       if (key === 'route') {
         // 路線排除離島：白沙（鳥嶼、姑婆嶼、吉貝、目斗、員貝、澎澎灘）、馬公（虎井、桶盤）、望安（東吉、西吉等離島支線）
-        const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
+        const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|將軍|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
         const removed = [];
         for (let i = items.length - 1; i >= 0; i--) {
           if (outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) removed.unshift(...items.splice(i, 1));
