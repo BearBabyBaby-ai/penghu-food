@@ -106,6 +106,11 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .map-credit a { display: block; margin-top: 3px; padding: 4px 7px; background: white; border: 1px solid #a9c5bd; border-radius: 6px; font-size: .72rem; }
   .pin-icon { border: none; background: none; }
   .pin-icon .pin-dot { position: absolute; inset: 0; display: grid; place-items: center; color: white; background: var(--pin); border: 2px solid white; border-radius: 50%; font-size: 10px; font-weight: 850; line-height: 1; box-shadow: 0 1px 5px #173a3b60; }
+  .pin-icon.route-pin .pin-dot { --pin: #0b3954; font-size: 11px; }
+  .route-arrow { background: none; border: none; pointer-events: none; }
+  .route-arrow svg { width: 18px; height: 18px; fill: #fff; stroke: #0b3954; stroke-width: 2; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+  .route-rule { margin: 4px 2px 8px; font-size: .86rem; line-height: 1.5; color: #334155; font-weight: 700; }
+  .badge-role { background: #0b3954; color: #fff; }
   .pin-icon.speed-pin { overflow: visible; }
   .pin-icon.speed-pin .pin-dot { --pin: #dc2626; }
   .pin-icon .pin-dir { position: absolute; left: 14px; top: -12px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: grid; place-items: center; pointer-events: none; color: #dc2626; }
@@ -785,18 +790,19 @@ function createCard(item) {
   card.classList.toggle('is-selected', item === selected);
   styleColor(card, regionPalette, item.region);
 
+  const label = item.sheet === 'route' && item.order ? item.order + '・' + item.name : item.name;
   const name = element('h4');
   name.tabIndex = -1;
   if (item.point) {
     const openOnMap = () => {
       if (desktop.matches) chooseItem(item);
     };
-    const nameButton = button(item.name, 'desktop-card-title', openOnMap);
+    const nameButton = button(label, 'desktop-card-title', openOnMap);
     nameButton.setAttribute('aria-label', '在地圖查看 ' + item.name);
-    name.append(nameButton, element('span', 'mobile-card-title', item.name));
+    name.append(nameButton, element('span', 'mobile-card-title', label));
     card.classList.add('has-point');
   } else {
-    name.textContent = item.name;
+    name.textContent = label;
   }
   // 電腦端點卡片在地圖上顯示；手機端點卡片直接導航
   card.addEventListener('click', event => {
@@ -811,7 +817,12 @@ function createCard(item) {
     }
   });
   const badges = element('div', 'badges');
-  badges.append(element('span', 'badge badge-region', item.region));
+  if (item.sheet === 'route') {
+    if (item.role) badges.append(element('span', 'badge badge-role', item.role));
+    if (item.village) badges.append(element('span', 'badge badge-region', item.village));
+  } else if (item.sheet !== 'speed') {
+    badges.append(element('span', 'badge badge-region', item.region));
+  }
   if (item.island) badges.append(element('span', 'badge badge-island', '離島（' + item.island + '）'));
   badges.append(...item.tags.map(categoryBadge));
   if (item.subtype && !item.tags.includes(item.subtype)) badges.append(element('span', 'badge-sub', item.subtype));
@@ -822,7 +833,9 @@ function createCard(item) {
 
   // 第一行：三欄配置 (店名 │ 類別 │ 導航)
   const top = element('div', 'card-top card-name-line');
-  top.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto' + (editor ? ' auto' : '');
+  const townLeft = item.sheet === 'speed';
+  top.style.gridTemplateColumns = (townLeft ? 'auto ' : '') + 'auto minmax(0, 1fr) auto' + (editor ? ' auto' : '');
+  if (townLeft) top.append(element('span', 'badge badge-region', item.region));
   top.append(name, badges);
   if (item.mapUrl) top.append(go);
   if (editor) {
@@ -831,6 +844,21 @@ function createCard(item) {
     top.append(edit);
   }
   card.append(top);
+
+  if (item.sheet === 'speed') {
+    const l1 = element('div', 'card-line');
+    l1.append(cardField('速限', item.speed ? item.speed + ' 公里' : '', 'limit'), cardField('拍攝方向', item.dir, 'dir'));
+    const l2 = element('div', 'card-line');
+    l2.append(cardField('取締項目', item.items, 'items'), cardField('科技執法種類', item.tech, 'tech'));
+    card.append(l1, l2);
+    if (item.unit) card.append(cardField('管轄分局', item.unit, 'unit'));
+  }
+  if (item.sheet === 'route') {
+    const l1 = element('div', 'card-line');
+    l1.append(cardField('鄉市／村里', item.village, 'village'), cardField('順序', item.order ? '第 ' + item.order + ' 點' : '', 'order'));
+    card.append(l1);
+    if (item.note) card.append(cardField('備註', item.note, 'note'));
+  }
 
   // 第二行：雙欄配置 (代表餐食 │ 推薦)
   if (item.dish || item.picks) {
@@ -851,11 +879,6 @@ function createCard(item) {
     card.append(cardField('地址', item.address, 'address'));
   }
 
-  // 第五行：完整網址（電腦端）
-  if (item.sheetUrl) {
-    card.append(cardField('完整網址', webUrl(item.sheetUrl) ? externalLink(item.sheetUrl, item.sheetUrl) : item.sheetUrl, 'url'));
-  }
-
   return card;
 }
 
@@ -870,7 +893,7 @@ function groupByRegion(items) {
 
 function renderResults() {
   const root = byId('results');
-  const groups = groupByRegion(matches);
+  const groups = dataset === 'speed' ? new Map([['測速與科技執法', matches]]) : groupByRegion(matches);
   byId('results-count').textContent = '共 ' + matches.length + ' 筆';
   root.replaceChildren();
   root.scrollTop = 0;
@@ -885,6 +908,7 @@ function renderResults() {
     title.id = 'group-' + region;
     group.setAttribute('aria-labelledby', title.id);
     title.append(element('span', '', region), element('span', '', items.length + ' 筆'));
+    if (dataset === 'speed') title.hidden = true;   // 測速與科技執法不分鄉市，鄉市放在卡片左側
     styleColor(group, regionPalette, region);
     const cards = element('div', 'cards');
     let shown = 0;
@@ -905,7 +929,15 @@ function renderResults() {
     }
 
     appendCards(expandedRegions.has(region) ? items.length : (groups.size === 1 ? chunkSize : 3));
-    group.append(title, cards, more);
+    group.append(title);
+    if (dataset === 'route') {
+      const ordered = items.filter(i => i.order).sort((a, b) => a.order - b.order);
+      if (ordered.length > 1) {
+        const mid = ordered.slice(1, -1).map(i => i.name);
+        group.append(element('p', 'route-rule', '起點 ' + ordered[0].name + (mid.length ? ' → 沿途 ' + mid.join(' → ') : '') + ' → 終點 ' + ordered[ordered.length - 1].name));
+      }
+    }
+    group.append(cards, more);
     root.append(group);
   }
 }
@@ -918,7 +950,11 @@ function filterFood() {
     matchesQuickKeyword(item, preset) &&
     (!state.category || item.tags.includes(state.category)) &&
     words.every(word => item.search.includes(word))
-  ).sort((a, b) => preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99));
+  ).sort((a, b) => {
+    if (dataset === 'speed') return (Number(a.no) || 9999) - (Number(b.no) || 9999) || a.row - b.row;
+    if (dataset === 'route') return String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
+    return preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99);
+  });
   setSelection(null);
   expandedRegions.clear();
   renderResults();
@@ -1031,6 +1067,7 @@ function renderMarkers() {
       points.reduce((sum, p) => sum + p.point[0], 0) / points.length,
       points.reduce((sum, p) => sum + p.point[1], 0) / points.length
     ] : item.point;
+    const isRoute = !isGroup && item.sheet === 'route' && item.order;
     const isSpeed = !isGroup && item.sheet === 'speed';
     const speedDeg = isSpeed ? directionDeg(item.dir) : null;
     const speedHtml = isSpeed
@@ -1040,9 +1077,9 @@ function renderMarkers() {
       : '';
     const marker = L.marker(location, {
       icon: L.divIcon({
-        className: 'pin-icon' + (isActive ? ' is-active' : '') + (isSpeed ? ' speed-pin' : ''),
-        html: isSpeed ? speedHtml : '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : '') + '</span>',
-        iconSize: isSpeed ? [24, 24] : [size, size]
+        className: 'pin-icon' + (isActive ? ' is-active' : '') + (isSpeed ? ' speed-pin' : '') + (isRoute ? ' route-pin' : ''),
+        html: isSpeed ? speedHtml : '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : (isRoute ? item.order : '')) + '</span>',
+        iconSize: isSpeed ? [24, 24] : (isRoute ? [24, 24] : [size, size])
       }),
       title: isGroup ? markerTitle : '',
       zIndexOffset: isActive ? 1000 : 0,
@@ -1090,6 +1127,34 @@ function renderMarkers() {
     });
     for (const point of points) drawnMarkers.set(point.id, marker);
     if (isActive) selectedMarker = marker;
+  }
+  drawRouteLines(zoom);
+}
+
+// 路線：依控制點順序，從起點沿途連到終點，線上加方向箭頭（控制點連線，道路未核對）
+function drawRouteLines(zoom) {
+  if (dataset !== 'route') return;
+  const byArea = new Map();
+  for (const item of activePoints.filter(i => i.order)) {
+    if (!byArea.has(item.region)) byArea.set(item.region, []);
+    byArea.get(item.region).push(item);
+  }
+  const palette = ['#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#be185d'];
+  let index = 0;
+  for (const list of byArea.values()) {
+    list.sort((a, b) => a.order - b.order);
+    const color = palette[index++ % palette.length];
+    const line = list.map(i => i.point);
+    if (line.length < 2) continue;
+    L.polyline(line, { color, weight: 4, opacity: .85, interactive: false }).addTo(markerLayer);
+    for (let k = 0; k < line.length - 1; k++) {
+      const a = map.project(line[k], zoom), b = map.project(line[k + 1], zoom);
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 46) continue;
+      const deg = Math.round(Math.atan2(b.x - a.x, -(b.y - a.y)) * 180 / Math.PI);
+      const mid = [(line[k][0] + line[k + 1][0]) / 2, (line[k][1] + line[k + 1][1]) / 2];
+      L.marker(mid, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'route-arrow', iconSize: [18, 18],
+        html: '<svg viewBox="0 0 24 24" style="transform:rotate(' + deg + 'deg)" aria-hidden="true"><path d="M12 1.5 20 20 12 15.5 4 20Z"/></svg>' }) }).addTo(markerLayer);
+    }
   }
 }
 
@@ -1149,7 +1214,7 @@ function updateMap() {
   if (!map) return;
   activePoints = matches.filter(item => item.point && penghuBounds.contains(item.point));
   const area = state.quick || '全部';
-  byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
+  byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家' + (dataset === 'route' ? '・路線依控制點順序連線，道路未核對' : '');
   map.invalidateSize({ pan: false });
   updateZoomFloor();
   if (activePoints.length && (state.quick || byId('query').value.trim())) {
@@ -1282,15 +1347,35 @@ function directionDeg(text) {
   return x || y ? Math.round(Math.atan2(x, y) * 180 / Math.PI) : null;
 }
 
-// 測速執法的速限、拍攝方向等欄位，從公開的試算表分頁補上
-async function loadSpeedDetails() {
-  const rows = await fetchSheetRows({ tabId: '777020', columns: 'C,E,F,G,H,I,K', requiredColumn: 'C' });
+// 測速、行程業者、路線的完整欄位，從公開的試算表分頁補上（修改仍走原本的寫回流程）
+const DETAIL_SOURCES = {
+  speed: { tabId: '777020', columns: 'B,C,E,F,G,H,I,J,K',
+    parse: ([no, name, lat, lng, speed, dir, items, tech, unit]) => ({ key: name + '|' + Number(lat) + '|' + Number(lng), data: { no, speed, dir, items, tech, unit } }) },
+  tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J',
+    parse: ([name, dish, picks, phone, address, hours]) => ({ key: name, data: { dish, picks, phone, address, hours } }) },
+  route: { tabId: '987631001', columns: 'A,C,D,E,F,G,H,I,O',
+    parse: ([area, role, order, name, village, lat, lng, rule, note]) => ({ key: name + '|' + Number(lat) + '|' + Number(lng), data: { area, role, order: Number(order) || 0, village, rule, note } }) }
+};
+async function loadDatasetDetails(key) {
+  const source = DETAIL_SOURCES[key];
+  const rows = await fetchSheetRows({ tabId: source.tabId, columns: source.columns, requiredColumn: { speed: 'C', tour: 'D', route: 'E' }[key] });
   const details = new Map();
   for (const row of rows) {
-    const [name, lat, lng, speed, dir, items, unit] = Array.from({ length: 7 }, (_, col) => sheetCellText(row?.c?.[col]));
-    details.set(name + '|' + Number(lat) + '|' + Number(lng), { speed, dir, items, unit });
+    const cells = Array.from({ length: source.columns.split(',').length }, (_, col) => String(row?.c?.[col]?.v ?? row?.c?.[col]?.f ?? '').trim());
+    const { key: k, data } = source.parse(cells);
+    details.set(k, data);
   }
   return details;
+}
+function mergeDetails(key, items, details) {
+  for (const item of items) {
+    const k = key === 'tour' ? item.name : (item.point ? item.name + '|' + item.point[0] + '|' + item.point[1] : '');
+    const d = details.get(k);
+    if (!d) continue;
+    for (const [field, value] of Object.entries(d)) if (value !== '' && value != null && !item[field]) item[field] = value;
+    if (key === 'route' && d.area) item.region = d.area;
+    if (key === 'route') item.search += ' ' + searchable([d.area, d.role, d.village].join(' '));
+  }
 }
 
 function mapSheetData(key, rows) {
@@ -1322,13 +1407,7 @@ async function switchDataset(key) {
       const result = await callBackend({ action: 'list', sheet: key, idToken: editor.token });
       if (!result.ok) throw new Error(result.error || '讀取失敗');
       const items = mapSheetData(key, result.rows);
-      if (key === 'speed') {
-        const details = await loadSpeedDetails().catch(() => new Map());
-        for (const item of items) {
-          const d = item.point && details.get(item.name + '|' + item.point[0] + '|' + item.point[1]);
-          if (d) Object.assign(item, d);
-        }
-      }
+      if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => new Map()));
       datasetCache.set(key, items);
     } catch (error) {
       byId('results-count').textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
