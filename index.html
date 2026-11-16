@@ -1688,7 +1688,7 @@ function deriveCombo(label) {
     const cLat = [port, ...spots].reduce((t, i) => t + i.point[0], 0) / (spots.length + 1), cLng = [port, ...spots].reduce((t, i) => t + i.point[1], 0) / (spots.length + 1);
     const ang = i => Math.atan2(i.point[0] - cLat, i.point[1] - cLng), base = ang(port);
     spots.sort((a, b) => ((ang(a) - base + 4 * Math.PI) % (2 * Math.PI)) - ((ang(b) - base + 4 * Math.PI) % (2 * Math.PI)));
-    parts = [['吉貝碼頭起', [port]], ['吉貝', spots], ['吉貝碼頭終', [routePoint('吉貝碼頭', extra.jibeiPort.lat, extra.jibeiPort.lng, { village: '白沙鄉／吉貝村' })]]];
+    parts = [['吉貝', [port]], ['吉貝', spots], ['吉貝', [routePoint('吉貝碼頭', extra.jibeiPort.lat, extra.jibeiPort.lng, { village: '白沙鄉／吉貝村' })]]];
   }
   const picked = parts.flatMap(([segment, list]) => list.map(item => ({ item, segment })));
   return picked.map(({ item, segment }, k) => ({
@@ -1850,7 +1850,7 @@ async function switchDataset(key) {
         const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
         const removed = [];
         for (let i = items.length - 1; i >= 0; i--) {
-          if (!isIslandRoute(items[i]) && outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) removed.unshift(...items.splice(i, 1));
+          if (outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) removed.unshift(...items.splice(i, 1));
         }
         datasetCache.set('routeOutlying', removed);
         autoOrderLoopRoutes(items);
