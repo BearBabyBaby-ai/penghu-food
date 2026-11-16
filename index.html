@@ -944,7 +944,7 @@ function renderResults() {
       more.textContent = '顯示更多' + region + '店家（剩 ' + (items.length - shown) + ' 筆）';
     }
 
-    appendCards(expandedRegions.has(region) ? items.length : (groups.size === 1 ? chunkSize : 3));
+    appendCards(dataset !== 'food' || expandedRegions.has(region) ? items.length : (groups.size === 1 ? chunkSize : 3));   // 美食以外一次全部顯示
     group.append(title);
     if (dataset === 'route') {
       const ordered = items.filter(i => i.order).sort((a, b) => a.order - b.order);
