@@ -1205,6 +1205,7 @@ function renderResults() {
   }
 }
 const foldedRegions = new Set();
+window.addEventListener('load', () => { let timer = 0; byId('results').addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(syncMapToList, 120); }); });
 
 function filterFood() {
   const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
@@ -1562,6 +1563,27 @@ function initializeMap() {
   });
 }
 
+// 路線：清單捲到哪個區域，地圖就同步對準那個區域
+function routeGroupPoints() {
+  const root = byId('results');
+  const groups = [...root.querySelectorAll('.group')];
+  if (!groups.length) return activePoints;
+  const top = root.getBoundingClientRect().top + 8;
+  let current = groups[0];
+  for (const g of groups) if (g.getBoundingClientRect().bottom > top + 20) { current = g; break; }
+  const region = current.querySelector('.group-title span')?.textContent;
+  const list = activePoints.filter(i => i.region === region);
+  return list.length ? list : activePoints;
+}
+let syncedRegion = '';
+function syncMapToList() {
+  if (!isRouteSet() || !map) return;
+  const points = routeGroupPoints();
+  const region = points[0]?.region || '';
+  if (region === syncedRegion) return;
+  syncedRegion = region;
+  fitPoints(points, 15);
+}
 function updateMap() {
   if (!desktop.matches) return;
   initializeMap();
@@ -1571,7 +1593,11 @@ function updateMap() {
   byId('map-status').textContent = area + '・' + activePoints.length + ' 筆可定位店家';
   map.invalidateSize({ pan: false });
   updateZoomFloor();
-  if (activePoints.length && (state.quick || byId('query').value.trim())) {
+  if (isRouteSet() && activePoints.length) {
+    const gp = routeGroupPoints();
+    syncedRegion = gp[0]?.region || '';
+    fitPoints(gp, 15);   // 路線：地圖對準清單目前看到的區域
+  } else if (activePoints.length && (state.quick || byId('query').value.trim())) {
     fitPoints(activePoints, 15);
   } else {
     showOverview();
