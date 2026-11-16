@@ -595,6 +595,9 @@ const routeKeywords = new Map([
 ]);
 const fullWidth = label => label.replace(/\(/g, '（').replace(/\)/g, '）');
 const islandKeywords = new Map(['吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美', '藍洞'].map(label => [label, { regions: [label, fullWidth(label)] }]));
+// 南海二島：七美、望安兩島的路線（先七美、再望安）
+islandKeywords.get('南海二島(七美、望安)').regions.push('七美鄉', '望安鄉');
+const southSeaOrder = region => region === '七美鄉' ? 0 : region === '望安鄉' ? 1 : 2;
 const isIslandRoute = item => [...islandKeywords.values()].some(p => p.regions.includes(item.region));
 const isRouteSet = () => dataset === 'route';
 routeKeywords.set('離島路線', { regions: [...islandKeywords.values()].flatMap(p => p.regions) });
@@ -1201,6 +1204,7 @@ function filterFood() {
     words.every(word => item.search.includes(word))
   ).sort((a, b) => {
     if (dataset === 'speed') return (Number(a.no) || 9999) - (Number(b.no) || 9999) || a.row - b.row;
+    if (isRouteSet() && state.sub === '南海二島(七美、望安)') return southSeaOrder(a.region) - southSeaOrder(b.region) || (a.order || 9999) - (b.order || 9999);
     if (isRouteSet()) return String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
     if (dataset === 'temple') return (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99) || Number(isOutlying(a)) - Number(isOutlying(b));
     return preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99);
@@ -1444,22 +1448,34 @@ function drawRouteLines(zoom) {
     list.sort((a, b) => a.order - b.order);
     const color = palette[index++ % palette.length];
     if (list.length < 2) continue;
-    const road = roadFor(list);
-    const line = road || list.map(i => i.point);   // 道路讀取中或失敗時，先用控制點直線連接
-    L.polyline(line, { color, weight: 5, opacity: road ? .9 : .45, dashArray: road ? null : '6 8', interactive: false }).addTo(markerLayer);
-    if (!road) continue;
-    let sinceArrow = 90;
-    for (let k = 0; k < line.length - 1; k++) {
-      const a = map.project(line[k], zoom), b = map.project(line[k + 1], zoom);
-      const length = Math.hypot(b.x - a.x, b.y - a.y);
-      sinceArrow += length;
-      if (sinceArrow < 120 || length < 4) continue;
-      sinceArrow = 0;
-      const deg = Math.round(Math.atan2(b.x - a.x, -(b.y - a.y)) * 180 / Math.PI);
-      const mid = [(line[k][0] + line[k + 1][0]) / 2, (line[k][1] + line[k + 1][1]) / 2];
-      L.marker(mid, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'route-arrow', iconSize: [18, 18],
-        html: '<svg viewBox="0 0 24 24" style="transform:rotate(' + deg + 'deg)" aria-hidden="true"><path d="M12 1.5 20 20 12 15.5 4 20Z"/></svg>' }) }).addTo(markerLayer);
+    const runs = [];
+    for (const item of list) {
+      const seg = item.segment || item.region, last = runs[runs.length - 1];
+      if (last && last.seg === seg) last.items.push(item); else runs.push({ seg, items: [item] });
     }
+    runs.forEach((run, r) => {
+      if (r > 0) {   // 跨島（海上）以虛線連接
+        const from = runs[r - 1].items[runs[r - 1].items.length - 1].point, to = run.items[0].point;
+        L.polyline([from, to], { color, weight: 3, opacity: .6, dashArray: '3 9', interactive: false }).addTo(markerLayer);
+      }
+      if (run.items.length < 2) return;
+      const road = roadFor(run.items);
+      const line = road || run.items.map(i => i.point);   // 道路讀取中或失敗時，先用控制點直線連接
+      L.polyline(line, { color, weight: 5, opacity: road ? .9 : .45, dashArray: road ? null : '6 8', interactive: false }).addTo(markerLayer);
+      if (!road) return;
+      let sinceArrow = 90;
+      for (let k = 0; k < line.length - 1; k++) {
+        const pa = map.project(line[k], zoom), pb = map.project(line[k + 1], zoom);
+        const length = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+        sinceArrow += length;
+        if (sinceArrow < 120 || length < 4) continue;
+        sinceArrow = 0;
+        const deg = Math.round(Math.atan2(pb.x - pa.x, -(pb.y - pa.y)) * 180 / Math.PI);
+        const mid = [(line[k][0] + line[k + 1][0]) / 2, (line[k][1] + line[k + 1][1]) / 2];
+        L.marker(mid, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'route-arrow', iconSize: [18, 18],
+          html: '<svg viewBox="0 0 24 24" style="transform:rotate(' + deg + 'deg)" aria-hidden="true"><path d="M12 1.5 20 20 12 15.5 4 20Z"/></svg>' }) }).addTo(markerLayer);
+      }
+    });
   }
 }
 
@@ -1640,8 +1656,29 @@ try {
 } catch {}
 
 
+// 離島路線的組合路線：南海二島＝先七美、再望安；南方四島＝先東吉嶼、西吉嶼藍洞、再七美
+const comboLabels = { '南海二島(七美、望安)': 'two', '南方四島(七美、東吉、藍洞巡航)': 'four' };
+const comboCache = new Map();
+function deriveCombo(label) {
+  const all = datasetCache.get('route') || [], out = datasetCache.get('routeOutlying') || [];
+  const byOrder = list => list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
+  const parts = comboLabels[label] === 'two'
+    ? [['七美鄉', byOrder(all.filter(i => i.region === '七美鄉'))], ['望安鄉', byOrder(all.filter(i => i.region === '望安鄉'))]]
+    : [['東吉嶼', out.filter(i => /東吉/.test(i.name) && i.point)], ['西吉嶼', out.filter(i => /西吉|藍洞/.test(i.name) && i.point)], ['七美鄉', byOrder(all.filter(i => i.region === '七美鄉'))]];
+  const picked = parts.flatMap(([segment, list]) => list.map(item => ({ item, segment })));
+  return picked.map(({ item, segment }, k) => ({
+    ...item, id: item.id + '@' + comboLabels[label], region: label, segment, order: k + 1,
+    role: k === 0 ? '起點' : k === picked.length - 1 ? '終點' : (/^(起點|終點)$/.test(item.role) ? '途經' : item.role)
+  }));
+}
+
 function currentItems() {
   if (dataset === 'food') return food;
+  if (dataset === 'route' && state.quick === '離島路線' && comboLabels[state.sub]) {
+    const key = state.sub + '|' + (datasetCache.get('route') || []).length;
+    if (!comboCache.has(key)) comboCache.set(key, deriveCombo(state.sub));
+    return comboCache.get(key);
+  }
   return datasetCache.get(dataset) || [];
 }
 
@@ -1786,9 +1823,11 @@ async function switchDataset(key) {
       if (key === 'route') {
         // 路線排除離島：白沙（鳥嶼、姑婆嶼、吉貝、目斗、員貝、澎澎灘）、馬公（虎井、桶盤）、望安（東吉、西吉等離島支線）
         const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
+        const removed = [];
         for (let i = items.length - 1; i >= 0; i--) {
-          if (!isIslandRoute(items[i]) && outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) items.splice(i, 1);
+          if (!isIslandRoute(items[i]) && outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) removed.unshift(...items.splice(i, 1));
         }
+        datasetCache.set('routeOutlying', removed);
         autoOrderLoopRoutes(items);
       }
       if (key === 'tour') {
