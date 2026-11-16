@@ -423,6 +423,10 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
         <p class="filter-label" id="quick-label">快速關鍵字</p>
         <div class="chips quick-chips" id="quick-keywords" role="group" aria-labelledby="quick-label"></div>
       </div>
+      <div class="filter-row" id="sub-row" hidden>
+        <p class="filter-label" id="sub-label">離島路線</p>
+        <div class="chips quick-chips" id="sub-keywords" role="group" aria-labelledby="sub-label"></div>
+      </div>
       <p class="quick-status" id="quick-status" role="status" hidden></p>
       <div class="filter-row" id="category-row">
         <p class="filter-label" id="categories-label">主類別</p>
@@ -587,13 +591,13 @@ const townKeywords = new Map([
 const routeKeywords = new Map([
   ['馬公市區', { regions: ['馬公市區'] }], ['北環島(白沙、西嶼)', { regions: ['北環島（白沙、西嶼）'] }],
   ['南環島(澎南區域)', { regions: ['澎南區域（南環島）'] }], ['湖西(東環島)', { regions: ['湖西鄉（東環島）'] }],
-  ['七美', { regions: ['七美鄉', '七美'] }], ['望安', { regions: ['望安鄉'] }]
+  ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
 ]);
 const fullWidth = label => label.replace(/\(/g, '（').replace(/\)/g, '）');
 const islandKeywords = new Map(['吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美', '藍洞'].map(label => [label, { regions: [label, fullWidth(label)] }]));
 const isIslandRoute = item => [...islandKeywords.values()].some(p => p.regions.includes(item.region));
 const isRouteSet = () => dataset === 'route';
-for (const [label, preset] of islandKeywords) if (label !== '七美') routeKeywords.set(label, preset);
+routeKeywords.set('離島路線', { regions: [...islandKeywords.values()].flatMap(p => p.regions) });
 const tideKeywords = ['奎壁山分海', '30天潮汐預報', '風浪天氣'];
 const tideModeOf = { '': 'all', '奎壁山分海': 'split', '30天潮汐預報': 'forecast', '風浪天氣': 'wx' };
 // 馬公、白沙的離島區域（廟宇清單排在最後）
@@ -601,10 +605,18 @@ const outlyingTerms = { '馬公市': ['虎井', '桶盤'], '白沙鄉': ['姑婆
 const isOutlying = item => (outlyingTerms[item.region] || []).some(term => item.location.includes(term));
 const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : key === 'route' ? [...routeKeywords.keys()] : [...townKeywords.keys()];
 const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : dataset === 'route' ? routeKeywords.get(state.quick) : townKeywords.get(state.quick);
+function updateSubRow() {
+  const show = dataset === 'route' && state.quick === '離島路線';
+  state.sub = '';
+  byId('sub-keywords').replaceChildren();
+  byId('sub-row').hidden = !show;
+  if (show) makeChips('sub-keywords', 'sub', '全部', [...islandKeywords.keys()], new Map());
+}
 function rebuildQuickChips() {
   state.quick = '';
   byId('quick-keywords').replaceChildren();
   makeChips('quick-keywords', 'quick', '全部', quickValues(dataset), new Map());
+  updateSubRow();
 }
 // 澎湖群島全覽範圍，含外圍離島及海域留白，依序為西南、東北。
 const penghuExtent = [
@@ -709,7 +721,7 @@ let food = [];
 let regionNames = [];
 let categoryNames = [];
 let foodReady = false;
-const state = { quick: '', category: '' };
+const state = { quick: '', sub: '', category: '' };
 let matches = [];
 let activePoints = [];
 let selected = null;
@@ -886,6 +898,7 @@ function setFilter(field, value) {
     chip.setAttribute('aria-pressed', String(chip.dataset.value === value));
   }
   if (dataset === 'tide') { window.penghuTideMode(tideModeOf[value] || 'all'); return; }
+  if (field === 'quick') updateSubRow();
   filterFood();
   saveView(false);
 }
@@ -941,7 +954,7 @@ function makeChips(id, field, allLabel, values, palette) {
     node.dataset.value = value;
     node.setAttribute('aria-pressed', String(state[field] === value));
     styleColor(node, palette, value);
-    if (value && field !== 'quick') {
+    if (value && field === 'category') {
       const dot = element('span', 'dot');
       dot.setAttribute('aria-hidden', 'true');
       node.prepend(dot);
@@ -1183,6 +1196,7 @@ function filterFood() {
   const preset = presetFor();
   matches = currentItems().filter(item =>
     matchesQuickKeyword(item, preset) &&
+    (!state.sub || matchesQuickKeyword(item, islandKeywords.get(state.sub))) &&
     (!state.category || item.tags.includes(state.category)) &&
     words.every(word => item.search.includes(word))
   ).sort((a, b) => {
