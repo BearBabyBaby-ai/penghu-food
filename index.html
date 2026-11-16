@@ -1762,7 +1762,14 @@ async function switchDataset(key) {
       if (!result.ok) throw new Error(result.error || '讀取失敗');
       const items = mapSheetData(key, result.rows);
       if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
-      if (key === 'route') autoOrderLoopRoutes(items);
+      if (key === 'route') {
+        // 路線排除離島：白沙（鳥嶼、姑婆嶼、吉貝、目斗、員貝、澎澎灘）、馬公（虎井、桶盤）、望安（東吉、西吉等離島支線）
+        const outlying = /鳥嶼|姑婆|吉貝|目斗|員貝|澎澎灘|虎井|桶盤|西吉|東吉|花嶼|東嶼坪|西嶼坪|將軍澳|貓嶼|頭巾|鐵砧|離島/;
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) items.splice(i, 1);
+        }
+        autoOrderLoopRoutes(items);
+      }
       if (key === 'tour') {
         const images = await loadTripImages().catch(() => new Map());
         // 業者名稱可簡寫：行程圖資寫「和慶」也對得上「和慶遊艇」
