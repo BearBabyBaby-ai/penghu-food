@@ -1490,7 +1490,12 @@ async function switchDataset(key) {
       if (DETAIL_SOURCES[key]) mergeDetails(key, items, await loadDatasetDetails(key).catch(() => ({ full: new Map(), byName: new Map() })));
       if (key === 'tour') {
         const images = await loadTripImages().catch(() => new Map());
-        for (const item of items) if (images.has(item.name)) item.tripImages = images.get(item.name);
+        // 業者名稱可簡寫：行程圖資寫「和慶」也對得上「和慶遊艇」
+        const sameVendor = (x, y) => x === y || (Math.min(x.length, y.length) >= 2 && (x.includes(y) || y.includes(x)));
+        for (const item of items) {
+          const trips = [...images].filter(([vendor]) => sameVendor(vendor, item.name)).flatMap(([, list]) => list);
+          if (trips.length) item.tripImages = trips;
+        }
       }
       datasetCache.set(key, items);
     } catch (error) {
