@@ -148,6 +148,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .group { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
   .group-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 8px; padding: 7px 10px; border-radius: 7px; background: var(--tone); color: white; font-size: .92rem; }
   .group-title span:last-child { font-size: .76rem; }
+  .group.folded > :not(.group-title) { display: none !important; }
   .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 8px; }
 
   /* === 店家資訊卡片：每一張自動套用不同配色 === */
@@ -1182,9 +1183,25 @@ function renderResults() {
       }
     }
     group.append(cards, more);
+    if (isRouteSet()) {   // 路線：點標題折疊／展開該區域
+      const fold = () => {
+        const closed = !group.classList.contains('folded');
+        group.classList.toggle('folded', closed);
+        title.setAttribute('aria-expanded', String(!closed));
+        if (closed) foldedRegions.add(region); else foldedRegions.delete(region);
+      };
+      title.tabIndex = 0;
+      title.setAttribute('role', 'button');
+      title.setAttribute('aria-expanded', 'true');
+      title.style.cursor = 'pointer';
+      title.addEventListener('click', fold);
+      title.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fold(); } });
+      if (foldedRegions.has(region)) fold();
+    }
     root.append(group);
   }
 }
+const foldedRegions = new Set();
 
 function filterFood() {
   const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
