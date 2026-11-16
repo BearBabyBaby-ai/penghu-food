@@ -582,13 +582,14 @@ const townKeywords = new Map([
 ]);
 const routeKeywords = new Map([
   ['馬公市區', { regions: ['馬公市區'] }], ['北環島(白沙、西嶼)', { regions: ['北環島（白沙、西嶼）'] }],
-  ['南環島(澎南區域)', { regions: ['澎南區域（南環島）'] }], ['湖西(東環島)', { regions: ['湖西鄉（東環島）'] }],
-  ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
+  ['南環島(澎南區域)', { regions: ['澎南區域（南環島）'] }], ['湖西(東環島)', { regions: ['湖西鄉（東環島）'] }]
 ]);
 const fullWidth = label => label.replace(/\(/g, '（').replace(/\)/g, '）');
 const islandKeywords = new Map(['吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美、藍洞'].map(label => [label, { regions: [label, fullWidth(label)] }]));
 // 南海二島：七美、望安兩島的路線（先七美、再望安）
 islandKeywords.get('南海二島(七美、望安)').regions.push('七美鄉', '望安鄉');
+islandKeywords.set('七美', { regions: ['七美鄉'] });
+islandKeywords.set('望安', { regions: ['望安鄉'] });
 const southSeaOrder = region => region === '七美鄉' ? 0 : region === '望安鄉' ? 1 : 2;
 const isIslandRoute = item => [...islandKeywords.values()].some(p => p.regions.includes(item.region));
 const isRouteSet = () => dataset === 'route';
