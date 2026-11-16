@@ -215,7 +215,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
       display: grid;
       grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
       gap: 13px;
-      height: clamp(470px, 66vh, 760px);
+      height: clamp(560px, 86vh, 1100px);
     }
     .results-panel, .map-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     .results-panel { padding: clamp(8px, 1.1vw, 13px); background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 3px 12px #1a3e4c0a; }
@@ -758,7 +758,7 @@ function storeInfo(item) {
   if (item.sheet === 'speed') {
     detailLine(info, '類型', item.tags.join('・'));
     detailLine(info, '速限', item.speed ? item.speed + ' 公里' : '');
-    detailLine(info, '拍攝方向', item.dir);
+    detailLine(info, '拍攝方向', dirText(item.dir));
     detailLine(info, '取締項目', item.items);
     detailLine(info, '管轄分局', item.unit);
     return info;
@@ -888,7 +888,7 @@ function createCard(item) {
     add('地址', item.address, 'address');
     add('簡易說明', item.desc, 'desc');
   } else if (kind === 'speed') {
-    pair(cardField('速限', item.speed ? item.speed + ' 公里' : '', 'limit'), cardField('拍攝方向', item.dir, 'dir'));
+    pair(cardField('速限', item.speed ? item.speed + ' 公里' : '', 'limit'), cardField('拍攝方向', dirText(item.dir), 'dir'));
     pair(cardField('取締項目', item.items, 'items'), cardField('科技執法種類', item.tech, 'tech'));
   } else if (kind === 'route') {
     add('鄉市／村里', item.village, 'village');
@@ -1072,9 +1072,16 @@ function renderMarkers() {
   const buckets = new Map();
   const bucketSize = zoom < 13 ? 34 : 24;
 
+  const sameSpot = new Map();
+  for (const item of activePoints) if (item.sheet === 'speed') {
+    const k = item.point.join(',');
+    if (!sameSpot.has(k)) sameSpot.set(k, []);
+    sameSpot.get(k).push(item);
+  }
+  for (const list of sameSpot.values()) list.forEach((item, i) => { item.pinShift = list.length > 1 ? Math.round((i - (list.length - 1) / 2) * 30) : 0; });
   for (const item of activePoints) {
     const pixel = map.project(item.point, zoom);
-    const key = Math.floor(pixel.x / bucketSize) + ',' + Math.floor(pixel.y / bucketSize);
+    const key = item.sheet === 'speed' ? 'speed|' + item.id : Math.floor(pixel.x / bucketSize) + ',' + Math.floor(pixel.y / bucketSize);
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(item);
   }
@@ -1107,7 +1114,8 @@ function renderMarkers() {
       icon: L.divIcon({
         className: 'pin-icon' + (isActive ? ' is-active' : '') + (isSpeed ? ' speed-pin' : '') + (isRoute ? ' route-pin' : ''),
         html: isSpeed ? speedHtml : '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : (isRoute ? item.order : '')) + '</span>',
-        iconSize: isSpeed ? [24, 24] : (isRoute ? [24, 24] : [size, size])
+        iconSize: isSpeed ? [24, 24] : (isRoute ? [24, 24] : [size, size]),
+        ...(isSpeed ? { iconAnchor: [12 - (item.pinShift || 0), 12], popupAnchor: [item.pinShift || 0, -12] } : {})
       }),
       title: isGroup ? markerTitle : '',
       zIndexOffset: isActive ? 1000 : 0,
@@ -1393,6 +1401,10 @@ function currentItems() {
   return dataset === 'food' ? food : (datasetCache.get(dataset) || []);
 }
 
+const DIR_ARROW = { '北': '↑', '南': '↓', '東': '→', '西': '←', '東北': '↗', '西北': '↖', '東南': '↘', '西南': '↙' };
+const dirArrow = v => { const m = String(v || '').match(/向\s*(東北|西北|東南|西南|東|西|南|北)/); return m ? DIR_ARROW[m[1]] : ''; };
+const dirText = v => v ? (dirArrow(v) + ' ' + v).trim() : '';
+
 // 拍攝方向「東南向西北」換成箭頭角度（北 0°、順時針）
 function directionDeg(text) {
   const m = String(text || '').replace(/\s/g, '').match(/^([東西南北]{1,2})[向往]([東西南北]{1,2})$/);
@@ -1404,8 +1416,8 @@ function directionDeg(text) {
 
 // 測速、行程業者、路線的完整欄位，從公開的試算表分頁補上（修改仍走原本的寫回流程）
 const DETAIL_SOURCES = {
-  speed: { tabId: '777020', columns: 'B,C,E,F,G,H,I,J,K', required: 'C',
-    parse: ([no, name, lat, lng, speed, dir, items, tech, unit]) => ({ name, lat, lng, data: { no, speed, dir, items, tech, unit } }) },
+  speed: { tabId: '777020', columns: 'A,B,C,E,F,G,H,I,J,K', required: 'C',
+    parse: ([type, no, name, lat, lng, speed, dir, items, tech, unit]) => ({ name, lat, lng, type, data: { no, speed, dir, items, tech, unit } }) },
   tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J', required: 'D',
     parse: ([name, dish, picks, phone, address, hours]) => ({ name, data: { dish, picks, phone, address, hours } }) },
   spot: { tabId: '2085392869', columns: 'E,G,H,L', required: 'E',
@@ -1423,8 +1435,8 @@ async function loadDatasetDetails(key) {
   const full = new Map(), byName = new Map();
   for (const row of rows) {
     const cells = Array.from({ length: source.columns.split(',').length }, (_, col) => String(row?.c?.[col]?.v ?? row?.c?.[col]?.f ?? '').trim());
-    const { name, lat, lng, data } = source.parse(cells);
-    if (lat !== undefined) full.set(name + '|' + Number(lat) + '|' + Number(lng), data);
+    const { name, lat, lng, type, data } = source.parse(cells);
+    if (lat !== undefined) full.set(name + '|' + Number(lat) + '|' + Number(lng) + (type !== undefined ? '|' + type : ''), data);
     byName.set(name, byName.has(name) ? null : data);   // 同名重複的不用名稱比對
   }
   return { full, byName };
@@ -1449,7 +1461,8 @@ async function loadTripImages() {
 
 function mergeDetails(key, items, details) {
   for (const item of items) {
-    const d = (item.point && details.full.get(item.name + '|' + item.point[0] + '|' + item.point[1])) || details.byName.get(item.name);
+    const typeKey = key === 'speed' ? '|' + (item.tags[0] || '') : '';
+    const d = (item.point && details.full.get(item.name + '|' + item.point[0] + '|' + item.point[1] + typeKey)) || (key === 'speed' ? null : details.byName.get(item.name));
     if (!d) continue;
     for (const [field, value] of Object.entries(d)) if (value !== '' && value != null && !item[field]) item[field] = value;
     if (key === 'route' && d.area) item.region = d.area;
