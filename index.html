@@ -1697,7 +1697,7 @@ function deriveCombo(label) {
   const byOrder = list => list.filter(i => i.order && i.point).sort((a, b) => a.order - b.order);
   const seven = ['七美鄉', byOrder(all.filter(i => i.region === '七美鄉'))];
   const harbor = (segment) => [segment, extra.maGong ? [routePoint('南海觀光碼頭', extra.maGong.lat, extra.maGong.lng, { village: '馬公市／光復里' })].filter(Boolean) : []];
-  const noTown = list => list.map(i => ({ ...i, town: '' }));
+  const noTown = list => list.map(i => ({ ...i, town: '', village: '', note: '', status: '' }));
   const east = ['東吉嶼', noTown(out.filter(i => /東吉/.test(i.name) && i.point))], west = ['西吉嶼藍洞', noTown(out.filter(i => /西吉|藍洞/.test(i.name) && i.point))];
   const kind = comboLabels[label];
   let parts;
