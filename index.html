@@ -689,6 +689,9 @@ function externalLink(text, url, className) {
   return node;
 }
 
+const routePalette = new Map([...regionPalette, ['馬公市區', ['#2252a3', '#e8f0ff']], ['北環島（白沙、西嶼）', ['#855905', '#fff2d0']],
+  ['澎南區域（南環島）', ['#aa3e23', '#fdebe4']], ['湖西鄉（東環島）', ['#08725f', '#e2f5ed']], ['吉貝', ['#0e7490', '#dff6fb']],
+  ['南海二島(七美、望安)', ['#1d4ed8', '#e3ebff']], ['南方四島(七美、東吉、藍洞巡航)', ['#be5a0a', '#ffeedd']], ['七美、藍洞', ['#15803d', '#e2f7e8']]]);
 function styleColor(node, palette, value) {
   const [tone, soft] = palette.get(value) || defaultColor;
   node.style.setProperty('--tone', tone);
@@ -1034,7 +1037,7 @@ function createCard(item) {
   const card = element('article', 'card');
   card.id = item.id;
   card.classList.toggle('is-selected', item === selected);
-  styleColor(card, regionPalette, item.region);
+  styleColor(card, isRouteSet() ? routePalette : regionPalette, item.region);
 
   const label = item.sheet === 'route' && item.order ? item.order + '・' + item.name : item.name;
   const name = element('h4');
@@ -1154,7 +1157,7 @@ function renderResults() {
     group.setAttribute('aria-labelledby', title.id);
     title.append(element('span', '', region), element('span', '', items.length + ' 筆'));
     if (dataset === 'speed') title.hidden = true;   // 測速與科技執法不分鄉市，鄉市放在卡片左側
-    styleColor(group, regionPalette, region);
+    styleColor(group, isRouteSet() ? routePalette : regionPalette, region);
     const cards = element('div', 'cards');
     let shown = 0;
     const more = button('', 'action more', () => {
@@ -1475,7 +1478,7 @@ function drawRouteLines(zoom) {
   let index = 0;
   for (const list of byArea.values()) {
     list.sort((a, b) => a.order - b.order);
-    const color = palette[index++ % palette.length];
+    const color = routePalette.get(list[0].region)?.[0] || palette[index++ % palette.length];
     if (list.length < 2) continue;
     const runs = [];
     for (const item of list) {
