@@ -208,10 +208,10 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .empty { margin: 0; padding: 20px; text-align: center; border: 1px dashed #9db4a9; border-radius: 8px; background: white; color: var(--muted); }
 
   @media (min-width: 900px) {
-    body > .hero, main.wrap { width: 75vw; max-width: none; margin-inline: auto; }
-    body > .hero { border-radius: 0 0 12px 12px; }
+    body > .hero, main.wrap { width: 100%; max-width: none; margin-inline: auto; }
+    body > .hero { border-radius: 0; }
     .hero .wrap { max-width: none; padding-inline: clamp(14px, 2vw, 28px); }
-    main.wrap { padding-inline: 0; }
+    main.wrap { padding-inline: var(--gutter); }
     .workspace {
       display: grid;
       grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
@@ -264,11 +264,8 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   }
   /* ===== 潮汐分海（與熊寶系統相同） ===== */
   #view-tide { --navy:#082f49; --blue:#075985; --sea:#0f8d96; --gold:#f4c430; --paper:#f7fbfc; --ink:#102a43; --muted:#607d8b; --line:#cfe4ea; font-family: "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; color: var(--ink); padding-bottom: 20px; }
-  .view-tabs { display: flex; gap: 8px; justify-content: center; padding: 10px var(--gutter) 0; }
-  .view-tabs button { border: 1px solid var(--line); background: #fff; color: #0b3954; border-radius: 999px; padding: 8px 20px; font: inherit; font-weight: 800; cursor: pointer; }
-  .view-tabs button[aria-pressed="true"] { background: #0b3954; color: #fff; border-color: #0b3954; }
     .page{padding:16px 0 28px}
-    .page.wide{width:90%;margin:0 auto}
+    .page.wide{width:100%;margin:0 auto;padding-inline:var(--gutter);box-sizing:border-box}
     .page-head{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:6px 14px;margin:2px 2px 12px}
     .page-head h2{margin:0;font-size:1.3rem;color:#0b3954;letter-spacing:.03em}
     .page-head p{margin:0;color:var(--muted);font-size:.86rem}
@@ -410,7 +407,6 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
     </div>
   </div>
 </header>
-<nav class="view-tabs" id="view-tabs" aria-label="頁面切換"><button type="button" data-view="info" aria-pressed="true">首頁</button><button type="button" data-view="tide" aria-pressed="false">潮汐分海</button></nav>
 <main class="wrap" id="content" tabindex="-1">
   <noscript><p class="empty">請啟用 JavaScript 以使用店家篩選。</p></noscript>
   <div class="layout">
@@ -1515,6 +1511,8 @@ function setEditor(next) {
   } catch {}
   byId('login').textContent = next ? '登出（' + next.email + '）' : '登入';
   byId('dataset-row').hidden = !next;
+  if (!next && window.penghuShowView) window.penghuShowView('info');
+  if (!next) for (const c of byId('datasets').querySelectorAll('button')) c.setAttribute('aria-pressed', String(c.dataset.value === 'food'));
   if (!next && dataset !== 'food') {
     switchDataset('food');
     return;
@@ -1727,9 +1725,23 @@ async function switchDataset(key) {
 }
 
 for (const [key, label] of datasets) {
-  const chip = button(label, 'chip', () => switchDataset(key));
+  const chip = button(label, 'chip', () => {
+    if (window.penghuShowView) window.penghuShowView('info');
+    for (const c of byId('datasets').querySelectorAll('button')) c.setAttribute('aria-pressed', String(c.dataset.value === key));
+    switchDataset(key);
+  });
   chip.dataset.value = key;
   chip.setAttribute('aria-pressed', String(key === 'food'));
+  byId('datasets').append(chip);
+}
+// 登入後才有的潮汐項目
+for (const [mode, label] of [['split', '奎壁山分海'], ['forecast', '30天潮汐預報'], ['wx', '風浪天氣']]) {
+  const chip = button(label, 'chip', () => {
+    for (const c of byId('datasets').querySelectorAll('button')) c.setAttribute('aria-pressed', String(c === chip));
+    if (window.penghuTide) window.penghuTide(mode);
+  });
+  chip.dataset.value = 'tide-' + mode;
+  chip.setAttribute('aria-pressed', 'false');
   byId('datasets').append(chip);
 }
 
@@ -2451,11 +2463,11 @@ function showView(view) {
   currentView = view;
   $('content').hidden = view !== 'info';
   $('view-tide').hidden = view !== 'tide';
-  for (const b of $('view-tabs').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
-  if (view === 'tide') { loadTideData(); if (tideMode === 'forecast') onForecastShown(); if (tideMode === 'wx') Wx.render(); }
+    if (view === 'tide') { loadTideData(); if (tideMode === 'forecast') onForecastShown(); if (tideMode === 'wx') Wx.render(); }
   else document.dispatchEvent(new Event('penghu:viewshown'));
 }
-$('view-tabs').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) showView(b.dataset.view); });
+window.penghuShowView = showView;
+window.penghuTide = mode => { showView('tide'); setTideMode(mode); };
 })();
 </script>
 </body>
