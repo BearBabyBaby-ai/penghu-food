@@ -262,10 +262,13 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; }
   }
+  .workspace[hidden] { display: none !important; }
   /* ===== 潮汐分海（與熊寶系統相同） ===== */
   #view-tide { --navy:#082f49; --blue:#075985; --sea:#0f8d96; --gold:#f4c430; --paper:#f7fbfc; --ink:#102a43; --muted:#607d8b; --line:#cfe4ea; font-family: "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif; color: var(--ink); padding-bottom: 20px; }
     .page{padding:16px 0 28px}
-    .page.wide{width:100%;margin:0 auto;padding-inline:var(--gutter);box-sizing:border-box}
+    .page.wide{width:100%;margin:0 auto;padding:0;box-sizing:border-box}
+    #view-tide .page-head,#tideSeg{display:none!important}
+    #view-tide #fcPane,#view-tide #wxPane{margin-top:18px}
     .page-head{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:6px 14px;margin:2px 2px 12px}
     .page-head h2{margin:0;font-size:1.3rem;color:#0b3954;letter-spacing:.03em}
     .page-head p{margin:0;color:var(--muted);font-size:.86rem}
@@ -460,8 +463,6 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
         </div>
       </section>
     </div>
-  </div>
-</main>
     <section id="view-tide" aria-label="潮汐分海" hidden>
       <div class="page wide">
         <div class="page-head"><h2>🌊 潮汐分海</h2><p>奎壁山摩西分海・未來 30 天潮汐・風浪天氣</p></div>
@@ -510,6 +511,8 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
         <div id="wxPane" hidden></div>
       </div>
     </section>
+  </div>
+</main>
 
     
     <section class="view" id="view-flight" aria-label="澎湖機場即時航班" hidden>
@@ -577,6 +580,22 @@ const quickKeywords = new Map([
   ["市區觀光", {"radiusKm": 0.3, "excludeTerms": {"*": ["虎井", "桶盤", "大倉"]}, "anchors": [[23.5634336, 119.5605422], [23.564694, 119.564039], [23.5651792, 119.5649382], [23.5647548, 119.5648526]]}],
 ]);
 const cityTourism = quickKeywords.get('市區觀光');
+const townKeywords = new Map([
+  ['馬公', { regions: ['馬公市'] }], ['湖西', { regions: ['湖西鄉'] }], ['白沙', { regions: ['白沙鄉'] }],
+  ['西嶼', { regions: ['西嶼鄉'] }], ['七美', { regions: ['七美鄉'] }], ['望安', { regions: ['望安鄉'] }]
+]);
+const tideKeywords = ['奎壁山分海', '30天潮汐預報', '風浪天氣'];
+const tideModeOf = { '': 'all', '奎壁山分海': 'split', '30天潮汐預報': 'forecast', '風浪天氣': 'wx' };
+// 馬公、白沙的離島區域（廟宇清單排在最後）
+const outlyingTerms = { '馬公市': ['虎井', '桶盤'], '白沙鄉': ['姑婆', '員貝', '吉貝', '鳥嶼', '目斗'] };
+const isOutlying = item => (outlyingTerms[item.region] || []).some(term => item.location.includes(term));
+const quickValues = key => key === 'tide' ? tideKeywords : (key === 'food' || key === 'spot') ? [...quickKeywords.keys()] : [...townKeywords.keys()];
+const presetFor = () => (dataset === 'food' || dataset === 'spot') ? quickKeywords.get(state.quick) : townKeywords.get(state.quick);
+function rebuildQuickChips() {
+  state.quick = '';
+  byId('quick-keywords').replaceChildren();
+  makeChips('quick-keywords', 'quick', '全部', quickValues(dataset), new Map());
+}
 // 澎湖群島全覽範圍，含外圍離島及海域留白，依序為西南、東北。
 const penghuExtent = [
   [23.1500000, 119.3000000],
@@ -613,7 +632,8 @@ const expandedRegions = new Set();
 // 電腦端登入後可切換修改的資料類別
 const datasets = new Map([
   ['food', '美食'], ['spot', '景點'], ['temple', '廟宇'], ['store', '其他店家'],
-  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線']
+  ['tour', '行程業者'], ['port', '港口・遊客中心'], ['speed', '測速與科技執法'], ['route', '路線'],
+  ['tide', '各地區潮汐']
 ]);
 let dataset = 'food';
 const datasetCache = new Map();
@@ -855,6 +875,7 @@ function setFilter(field, value) {
   for (const chip of document.querySelectorAll('button[data-filter="' + field + '"]')) {
     chip.setAttribute('aria-pressed', String(chip.dataset.value === value));
   }
+  if (dataset === 'tide') { window.penghuTideMode(tideModeOf[value] || 'all'); return; }
   filterFood();
   saveView(false);
 }
@@ -1149,7 +1170,7 @@ function renderResults() {
 function filterFood() {
   const words = searchable(byId('query').value.trim()).split(/\s+/).filter(Boolean);
   const order = new Map(regionNames.map((region, index) => [region, index]));
-  const preset = quickKeywords.get(state.quick);
+  const preset = presetFor();
   matches = currentItems().filter(item =>
     matchesQuickKeyword(item, preset) &&
     (!state.category || item.tags.includes(state.category)) &&
@@ -1157,6 +1178,7 @@ function filterFood() {
   ).sort((a, b) => {
     if (dataset === 'speed') return (Number(a.no) || 9999) - (Number(b.no) || 9999) || a.row - b.row;
     if (dataset === 'route') return String(a.region).localeCompare(String(b.region), 'zh-Hant') || (a.order || 9999) - (b.order || 9999);
+    if (dataset === 'temple') return (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99) || Number(isOutlying(a)) - Number(isOutlying(b));
     return preset?.anchors ? a.tourismKm - b.tourismKm : (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99);
   });
   setSelection(null);
@@ -1512,7 +1534,6 @@ function setEditor(next) {
   } catch {}
   byId('login').textContent = next ? '登出（' + next.email + '）' : '登入';
   byId('dataset-row').hidden = !next;
-  if (!next && window.penghuShowView) window.penghuShowView('info');
   if (!next) for (const c of byId('datasets').querySelectorAll('button')) c.setAttribute('aria-pressed', String(c.dataset.value === 'food'));
   if (!next && dataset !== 'food') {
     switchDataset('food');
@@ -1689,6 +1710,15 @@ function mapSheetData(key, rows) {
 }
 
 async function switchDataset(key) {
+  if (key === 'tide') {
+    dataset = 'tide';
+    for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === key));
+    rebuildQuickChips();
+    byId('category-row').hidden = true;
+    window.penghuShowView('tide');
+    window.penghuTideMode('all');
+    return;
+  }
   if (key === dataset && (key === 'food' || datasetCache.has(key))) return;
   for (const chip of byId('datasets').querySelectorAll('button')) chip.setAttribute('aria-pressed', String(chip.dataset.value === key));
   if (key !== 'food' && !datasetCache.has(key)) {
@@ -1715,7 +1745,11 @@ async function switchDataset(key) {
       return;
     }
   }
+  const wasTide = dataset === 'tide';
+  const changed = dataset !== key;
   dataset = key;
+  if (wasTide) window.penghuShowView('info');
+  if (changed) rebuildQuickChips();
   byId('category-row').hidden = key !== 'food';
   byId('results-title').textContent = key === 'food' ? '美食推薦' : datasetLabel(key);
   if (key !== 'food' && state.category) {
@@ -1726,23 +1760,9 @@ async function switchDataset(key) {
 }
 
 for (const [key, label] of datasets) {
-  const chip = button(label, 'chip', () => {
-    if (window.penghuShowView) window.penghuShowView('info');
-    for (const c of byId('datasets').querySelectorAll('button')) c.setAttribute('aria-pressed', String(c.dataset.value === key));
-    switchDataset(key);
-  });
+  const chip = button(label, 'chip', () => switchDataset(key));
   chip.dataset.value = key;
   chip.setAttribute('aria-pressed', String(key === 'food'));
-  byId('datasets').append(chip);
-}
-// 登入後才有的潮汐項目
-for (const [mode, label] of [['split', '奎壁山分海'], ['forecast', '30天潮汐預報'], ['wx', '風浪天氣']]) {
-  const chip = button(label, 'chip', () => {
-    for (const c of byId('datasets').querySelectorAll('button')) c.setAttribute('aria-pressed', String(c === chip));
-    if (window.penghuTide) window.penghuTide(mode);
-  });
-  chip.dataset.value = 'tide-' + mode;
-  chip.setAttribute('aria-pressed', 'false');
   byId('datasets').append(chip);
 }
 
@@ -1952,13 +1972,13 @@ tideMonth.addEventListener('change', () => renderTideMonth(tideMonth.value));
 
 var tideMode = 'split';
 function setTideMode(mode) {
-  tideMode = ['forecast', 'wx'].includes(mode) ? mode : 'split';
-  $('splitPane').hidden = tideMode !== 'split';
-  $('fcPane').hidden = tideMode !== 'forecast';
-  $('wxPane').hidden = tideMode !== 'wx';
-  if (tideMode === 'wx' && typeof Wx !== 'undefined') Wx.render();
+  tideMode = ['forecast', 'wx', 'all'].includes(mode) ? mode : 'split';
+  $('splitPane').hidden = !['split', 'all'].includes(tideMode);
+  $('fcPane').hidden = !['forecast', 'all'].includes(tideMode);
+  $('wxPane').hidden = !['wx', 'all'].includes(tideMode);
+  if (['wx', 'all'].includes(tideMode) && typeof Wx !== 'undefined') Wx.render();
   document.querySelectorAll('#tideSeg [data-tm]').forEach(b => b.classList.toggle('active', b.dataset.tm === tideMode));
-  if (tideMode === 'forecast' && currentView === 'tide') onForecastShown();
+  if (['forecast', 'all'].includes(tideMode) && currentView === 'tide') onForecastShown();
 }
 $('tideSeg').addEventListener('click', e => { const b = e.target.closest('[data-tm]'); if (b) setTideMode(b.dataset.tm); });
 document.addEventListener('click', e => { const g = e.target.closest('[data-tm-go]'); if (g) setTimeout(() => setTideMode(g.dataset.tmGo), 0); });
@@ -2462,13 +2482,13 @@ const Wx = (() => {
 // 頁面切換：資訊推薦／潮汐分海
 function showView(view) {
   currentView = view;
-  $('content').hidden = view !== 'info';
+  document.querySelector('.workspace').hidden = view !== 'info';
   $('view-tide').hidden = view !== 'tide';
-    if (view === 'tide') { loadTideData(); if (tideMode === 'forecast') onForecastShown(); if (tideMode === 'wx') Wx.render(); }
+  if (view === 'tide') { loadTideData(); if (tideMode === 'forecast' || tideMode === 'all') onForecastShown(); if (tideMode === 'wx' || tideMode === 'all') Wx.render(); }
   else document.dispatchEvent(new Event('penghu:viewshown'));
 }
 window.penghuShowView = showView;
-window.penghuTide = mode => { showView('tide'); setTideMode(mode); };
+window.penghuTideMode = mode => { setTideMode(mode); };
 })();
 </script>
 </body>
