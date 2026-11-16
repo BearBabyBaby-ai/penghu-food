@@ -1407,6 +1407,7 @@ function renderMarkers() {
 
 // 路線：依控制點順序，沿實際道路從起點連到終點，線上加方向箭頭
 const roadCache = new Map();
+const roadTries = new Map();
 function roadFor(list) {
   const coords = list.map(i => i.point[1].toFixed(6) + ',' + i.point[0].toFixed(6)).join(';');
   const walking = list.some(i => /步行/.test([i.rule, i.note].join(' ')));
@@ -1422,7 +1423,11 @@ function roadFor(list) {
         roadCache.set(cacheKey, line.map(([lng, lat]) => [lat, lng]));
         if (isRouteSet()) renderMarkers();
       })
-      .catch(() => roadCache.set(cacheKey, false));
+      .catch(() => {   // 讀取失敗：稍後自動重試（最多 4 次），不畫直線
+        roadTries.set(cacheKey, (roadTries.get(cacheKey) || 0) + 1);
+        if (roadTries.get(cacheKey) < 4) window.setTimeout(() => { roadCache.delete(cacheKey); if (isRouteSet()) renderMarkers(); }, 2500);
+        else roadCache.set(cacheKey, false);
+      });
   }
   return roadCache.get(cacheKey);
 }
@@ -1475,9 +1480,9 @@ function drawRouteLines(zoom) {
       }
       if (run.items.length < 2) return;
       const road = roadFor(run.items);
-      const line = road || run.items.map(i => i.point);   // 道路讀取中或失敗時，先用控制點直線連接
-      L.polyline(line, { color, weight: 5, opacity: road ? .9 : .45, dashArray: road ? null : '6 8', interactive: false }).addTo(markerLayer);
-      if (!road) return;
+      if (!road) return;   // 道路讀取中或失敗時不畫直線，讀到道路才畫
+      const line = road;
+      L.polyline(line, { color, weight: 5, opacity: .9, interactive: false }).addTo(markerLayer);
       let sinceArrow = 90;
       for (let k = 0; k < line.length - 1; k++) {
         const pa = map.project(line[k], zoom), pb = map.project(line[k + 1], zoom);
