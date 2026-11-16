@@ -1828,24 +1828,11 @@ function autoOrderLoopRoutes(items) {
     if (fixed.length < 2 || new Set(fixed.map(i => i.point.join(','))).size >= 3 || !/逆時針/.test(fixed[0].rule || '')) continue;
     const cand = list.filter(i => !i.order && i.point && i.status === '主線候選');
     if (!cand.length) continue;
-    // 由起點出發，依最近鄰＋2-opt 排出不交叉的環線，再轉成逆時針
-    const dist = (a, b) => Math.hypot(a.point[0] - b.point[0], (a.point[1] - b.point[1]) * Math.cos(a.point[0] * Math.PI / 180));
-    let tour = [fixed[0]], rest = [...cand];
-    while (rest.length) {
-      const last = tour[tour.length - 1];
-      rest.sort((a, b) => dist(last, a) - dist(last, b));
-      tour.push(rest.shift());
-    }
-    for (let improved = true, guard = 0; improved && guard < 60; guard++) {
-      improved = false;
-      for (let a = 1; a < tour.length - 1; a++) for (let b = a + 1; b < tour.length; b++) {
-        const p = tour[a - 1], q = tour[a], r = tour[b], t = tour[(b + 1) % tour.length];
-        if (dist(p, r) + dist(q, t) < dist(p, q) + dist(r, t) - 1e-12) { tour.splice(a, b - a + 1, ...tour.slice(a, b + 1).reverse()); improved = true; }
-      }
-    }
-    const area = tour.reduce((t, i, k) => { const j = tour[(k + 1) % tour.length]; return t + (i.point[1] * j.point[0] - j.point[1] * i.point[0]); }, 0);
-    if (area < 0) tour = [tour[0], ...tour.slice(1).reverse()];   // 面積為正＝逆時針
-    cand.length = 0; cand.push(...tour.slice(1));
+    const all = [fixed[0], ...cand];
+    const cLat = all.reduce((t, i) => t + i.point[0], 0) / all.length, cLng = all.reduce((t, i) => t + i.point[1], 0) / all.length;
+    const ang = i => Math.atan2(i.point[0] - cLat, i.point[1] - cLng);
+    const base = ang(fixed[0]), turn = i => (ang(i) - base + 4 * Math.PI) % (2 * Math.PI);
+    cand.sort((a, b) => turn(a) - turn(b));
     cand.forEach((item, k) => { item.order = fixed[0].order + 1 + k; });
     fixed[fixed.length - 1].order = fixed[0].order + cand.length + 1;
   }
