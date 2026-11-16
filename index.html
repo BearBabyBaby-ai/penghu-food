@@ -1197,7 +1197,13 @@ function renderResults() {
       title.setAttribute('role', 'button');
       title.setAttribute('aria-expanded', 'true');
       title.style.cursor = 'pointer';
-      title.addEventListener('click', () => { fold(); focusGroupOnMap(region); });
+      title.addEventListener('click', () => {
+        fold();
+        const root = byId('results');
+        lastListProgrammatic = Date.now() + 600;   // 折疊造成的捲動不要反過來帶動地圖
+        root.scrollTop += group.getBoundingClientRect().top - root.getBoundingClientRect().top;
+        focusGroupOnMap(region);
+      });
       title.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fold(); } });
       if (foldedRegions.has(region)) fold();
     }
@@ -1583,7 +1589,7 @@ function routeGroupPoints() {
 }
 let syncedRegion = '', lastListProgrammatic = 0;
 function syncMapToList() {
-  if (!isRouteSet() || !map || Date.now() - lastListProgrammatic < 600) return;
+  if (!isRouteSet() || !map || Date.now() - lastListProgrammatic < 900) return;
   const points = routeGroupPoints();
   const region = points[0]?.region || '';
   if (region === syncedRegion) return;
