@@ -1485,6 +1485,16 @@ const roadTries = new Map();
 const routePlacements = new Map();
 const positionedRoads = new Map();
 const unavailableRoads = new Set();
+// 導引點取自隘門沙灘停車場西側進出道路，以及通往林投公園的縣道 204。
+// 景點卡片與圖釘仍讀取原始景點座標。
+const aimenParkingApproach = [23.55632, 119.63788];
+const aimenWestRoad = [23.55872, 119.63674];
+const aimenCounty204 = [23.56280, 119.64039];
+const aimenRoadConstraints = new Map([
+  [aimenParkingApproach, { radius: 20, bearing: '' }],
+  [aimenWestRoad, { radius: 20, bearing: '' }],
+  [aimenCounty204, { radius: 20, bearing: '90,40' }],
+]);
 let routeListFrame = 0;
 
 function refreshRouteList() {
@@ -1498,9 +1508,12 @@ function refreshRouteList() {
 async function fetchRoad(points, walking, mainland) {
   const coords = points.map(([lat, lng]) => lng.toFixed(7) + ',' + lat.toFixed(7)).join(';');
   const base = walking ? 'https://routing.openstreetmap.de/routed-foot/' : 'https://routing.openstreetmap.de/routed-car/';
-  const mainlandOptions = mainland ? '&steps=true&generate_hints=false&radiuses=' + points.map(() => 500).join(';') : '';
+  const mainlandOptions = mainland ? '&steps=true&generate_hints=false&radiuses=' +
+    points.map(point => aimenRoadConstraints.get(point)?.radius ?? 500).join(';') : '';
+  const bearings = points.includes(aimenCounty204) ? '&bearings=' +
+    points.map(point => aimenRoadConstraints.get(point)?.bearing ?? '').join(';') : '';
   const response = await fetch(base + 'route/v1/driving/' + coords + '?overview=full&geometries=geojson&continue_straight=false' +
-    mainlandOptions, { signal: AbortSignal.timeout(20000) });
+    mainlandOptions + bearings, { signal: AbortSignal.timeout(20000) });
   if (!response.ok) {
     const error = new Error('Road service unavailable');
     error.retry = response.status === 429 || response.status >= 500;
@@ -1533,16 +1546,36 @@ async function roadSections(points, walking) {
   }
 }
 
+function huxiRoadParts(list, points) {
+  const beach = list.findIndex(item => item.name === '隘門沙灘');
+  if (list[0].region !== '湖西鄉（東環島）' || beach < 1 ||
+      list[beach + 1]?.name !== '林投公園' || list[beach + 2]?.name !== '雲朵盪鞦韆' ||
+      list[beach + 3]?.name !== '林投沙灘') return null;
+
+  const park = beach + 1;
+  const lintoBeach = beach + 3;
+  return [
+    { walking: false, points: [...points.slice(0, beach), aimenWestRoad, aimenParkingApproach] },
+    { walking: false, points: [aimenParkingApproach, aimenWestRoad, aimenCounty204, points[park]] },
+    { walking: true, points: points.slice(park, lintoBeach + 1) },
+    { walking: false, points: points.slice(lintoBeach) },
+  ].filter(part => part.points.length > 1);
+}
+
 function roadFor(list) {
   const waypoints = list.map(item => item.point);
   const waypointIndex = list.map((_, index) => index);
   const mainland = mainlandRouteAreas.has(list[0].region);
-  const walking = list[0].region === magongHeritageRoute || list[0].region === '馬公市區' || list.some(i => /步行/.test([i.rule, i.note].join(' ')));
-  const cacheKey = JSON.stringify([walking, mainland, waypoints]);
+  const huxiParts = huxiRoadParts(list, waypoints);
+  const walking = list[0].region === magongHeritageRoute || list[0].region === '馬公市區' ||
+    (!huxiParts && list.some(i => /步行/.test([i.rule, i.note].join(' '))));
+  const cacheKey = JSON.stringify([walking, mainland, huxiParts || waypoints]);
   if (!roadCache.has(cacheKey)) {
     roadCache.set(cacheKey, null);
-    const request = mainland ? roadSections(waypoints, walking) :
-      fetchRoad(waypoints, walking, false).then(road => ({ sections: [road], incomplete: false }));
+    const request = huxiParts ? Promise.all(huxiParts.map(part => roadSections(part.points, part.walking)))
+      .then(parts => ({ sections: parts.flatMap(part => part.sections), incomplete: parts.some(part => part.incomplete) })) :
+      mainland ? roadSections(waypoints, walking) :
+        fetchRoad(waypoints, walking, false).then(road => ({ sections: [road], incomplete: false }));
     request
       .then(road => {
         roadCache.set(cacheKey, road);
