@@ -1482,6 +1482,7 @@ function renderMarkers() {
 
 const roadCache = new Map();
 const roadTries = new Map();
+let nextRoadRequest = Promise.resolve();
 const routePlacements = new Map();
 const positionedRoads = new Map();
 const unavailableRoads = new Set();
@@ -1555,6 +1556,10 @@ async function fetchRoad(points, walking, mainland) {
     points.map(point => routeRoadConstraints.get(point)?.radius ?? 500).join(';') : '';
   const bearings = points.includes(aimenCounty204) ? '&bearings=' +
     points.map(point => routeRoadConstraints.get(point)?.bearing ?? '').join(';') : '';
+  // FOSSGIS 算路服務每秒最多接受一個請求。
+  const requestTurn = nextRoadRequest;
+  nextRoadRequest = requestTurn.then(() => new Promise(resolve => window.setTimeout(resolve, 1050)));
+  await requestTurn;
   const response = await fetch(base + 'route/v1/driving/' + coords + '?overview=full&geometries=geojson&continue_straight=false' +
     mainlandOptions + bearings, { signal: AbortSignal.timeout(20000) });
   if (!response.ok) {
@@ -1618,24 +1623,12 @@ function huxiRoadParts(list, points) {
   return parts;
 }
 
-function roadFor(list) {
-  const waypoints = list.map(item => item.point);
-  const waypointIndex = list.map((_, index) => index);
-  const mainland = mainlandRouteAreas.has(list[0].region);
-  const huxiParts = huxiRoadParts(list, waypoints);
-  const walking = list[0].region === magongHeritageRoute || list[0].region === '馬公市區' ||
-    (!huxiParts && list.some(i => /步行/.test([i.rule, i.note].join(' '))));
-  const cacheKey = JSON.stringify([walking, mainland, huxiParts || waypoints]);
+function cachedRoad(cacheKey, request) {
   if (!roadCache.has(cacheKey)) {
     roadCache.set(cacheKey, null);
-    const request = huxiParts ? Promise.all(huxiParts.map(part => part.line
-      ? { sections: [{ line: part.line }], incomplete: false }
-      : roadSections(part.points, part.walking)))
-      .then(parts => ({ sections: parts.flatMap(part => part.sections), incomplete: parts.some(part => part.incomplete) })) :
-      mainland ? roadSections(waypoints, walking) :
-        fetchRoad(waypoints, walking, false).then(road => ({ sections: [road], incomplete: false }));
-    request
+    request()
       .then(road => {
+        roadTries.delete(cacheKey);
         roadCache.set(cacheKey, road);
         if (isRouteSet()) renderMarkers();
       })
@@ -1648,7 +1641,28 @@ function roadFor(list) {
         }
       });
   }
-  return { data: roadCache.get(cacheKey), waypointIndex };
+  return roadCache.get(cacheKey);
+}
+
+function roadFor(list) {
+  const waypoints = list.map(item => item.point);
+  const waypointIndex = list.map((_, index) => index);
+  const huxiParts = huxiRoadParts(list, waypoints);
+  if (huxiParts) {
+    const parts = huxiParts.map(part => part.line ? { sections: [{ line: part.line }] } :
+      cachedRoad(JSON.stringify([part.walking, true, part.points]), () => roadSections(part.points, part.walking)));
+    return { waypointIndex, data: {
+      sections: parts.flatMap(part => part?.sections ?? []),
+      incomplete: parts.some(part => part === false || part?.incomplete),
+    } };
+  }
+  const mainland = mainlandRouteAreas.has(list[0].region);
+  const walking = list[0].region === magongHeritageRoute || list[0].region === '馬公市區' ||
+    list.some(i => /步行/.test([i.rule, i.note].join(' ')));
+  const cacheKey = JSON.stringify([walking, mainland, waypoints]);
+  const data = cachedRoad(cacheKey, () => mainland ? roadSections(waypoints, walking) :
+    fetchRoad(waypoints, walking, false).then(road => ({ sections: [road], incomplete: false })));
+  return { data, waypointIndex };
 }
 
 // 對照沿路里程與垂直距離。景點座標仍使用原表的實際位置。
