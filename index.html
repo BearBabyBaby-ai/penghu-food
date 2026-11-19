@@ -1225,6 +1225,11 @@ function renderResults(preserveScroll = false) {
       }
       if (unavailableRoads.has(region)) group.append(element('p', 'route-rule', '部分路段暫時無法載入。'));
     }
+    if (route) {
+      const save = button('下載發布用文字', 'action', () => downloadRouteText(region, items));
+      save.setAttribute('aria-label', '下載' + region + '的發布用文字');
+      group.append(save);
+    }
     group.append(cards, more);
     if (isRouteSet()) {   // 路線：點標題折疊／展開該區域
       const fold = () => {
@@ -1252,6 +1257,32 @@ function renderResults(preserveScroll = false) {
   root.scrollTop = scroll;
 }
 const foldedRegions = new Set();
+// 路線：沿途資訊轉成發布用文字（.txt）
+function downloadRouteText(region, items) {
+  const stopLine = item => {
+    const place = [item.village || item.town, ].filter(Boolean).join('');
+    return item.name + (place ? '（' + place + '）' : '');
+  };
+  const ordered = items.filter(i => i.order).sort((a, b) => a.order - b.order);
+  const extras = items.filter(i => !i.order);
+  const rule = ordered[0]?.segment ? '' : (items.find(i => i.rule)?.rule || '');
+  const lines = ['【' + region + '】'];
+  if (rule) lines.push('路線：' + rule.replace(/\s*→\s*/g, ' → '));
+  if (ordered.length) {
+    lines.push('', '行經順序：');
+    for (const item of ordered) lines.push(item.order + '. ' + stopLine(item) + (item.role === '起點' || item.role === '終點' ? '【' + item.role + '】' : ''));
+  }
+  if (extras.length) {
+    lines.push('', '沿途景點：');
+    for (const item of extras) { const note = routePointLabel(item); lines.push('・' + stopLine(item) + (/^距主線/.test(note) ? '・' + note : '')); }
+  }
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = region + '.txt';
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 window.addEventListener('load', () => { let timer = 0; byId('results').addEventListener('scroll', () => { clearTimeout(timer); timer = setTimeout(syncMapToList, 150); }); });
 
 function filterFood() {
@@ -2170,6 +2201,18 @@ function autoOrderLoopRoutes(items) {
   }
 }
 
+// 北環島：起點 → 澎湖水族館 → 波浪堤坊 → 城前牡蠣寶寶 → 波浪堤坊 → 澎湖水族館 → 漁翁島遊客中心 → 西嶼燈塔 → 終點
+function northSpurRoute(items) {
+  const area = items.filter(i => i.region === '北環島（白沙、西嶼）');
+  const fixed = area.filter(i => i.order).sort((a, b) => a.order - b.order);
+  const [aquarium, wave, oyster] = ['澎湖水族館', '波浪堤坊', '城前牡蠣寶寶'].map(name => area.find(i => i.name === name));
+  if (fixed.length < 2 || !aquarium || !wave || !oyster) return;
+  const back = (item, tag) => ({ ...item, id: item.id + '@' + tag });
+  const sequence = [fixed[0], aquarium, wave, oyster, back(wave, 'back'), back(aquarium, 'back'), ...fixed.slice(1)];
+  sequence.forEach((item, k) => { item.order = k + 1; });
+  items.push(sequence[4], sequence[5]);
+}
+
 function mergeDetails(key, items, details) {
   for (const item of items) {
     const typeKey = key === 'speed' ? '|' + (item.tags[0] || '') : '';
@@ -2243,6 +2286,7 @@ async function switchDataset(key) {
         }
         datasetCache.set('routeOutlying', removed);
         autoOrderLoopRoutes(items);
+        northSpurRoute(items);
         datasetCache.set('routeExtra', await loadRouteExtras().catch(() => ({})));
       }
       if (key === 'tour') {
