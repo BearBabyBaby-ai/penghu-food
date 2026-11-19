@@ -1632,6 +1632,21 @@ async function roadSections(points, walking) {
   }
 }
 
+// 北環島 7→8（後寮沿海）：依指定的沿海路線繪製，8 回到 7 走同一條
+const northCoastRoad = [[23.6739233, 119.577328], [23.6740635, 119.5775066], [23.6742038, 119.5776853], [23.6743441, 119.5778256], [23.6744843, 119.5779405], [23.6746246, 119.5780681], [23.6747648, 119.5781701], [23.6749051, 119.578285], [23.6750453, 119.5784126], [23.6751856, 119.5785274], [23.6753258, 119.5786167], [23.6754661, 119.5786805], [23.6756064, 119.5787316], [23.6757466, 119.5787316], [23.6758869, 119.5787443]];
+function northRoadParts(list, points) {
+  if (list[0].region !== '北環島（白沙、西嶼）') return null;
+  const k = list.findIndex(item => item.returnVia);
+  const back = list[k]?.returnVia?.[0];
+  if (k < 1 || list[k - 1] !== back || list[k + 1] !== back) return null;
+  return [
+    { walking: false, points: points.slice(0, k) },
+    { line: [points[k - 1], ...northCoastRoad] },
+    { line: [...[...northCoastRoad].reverse(), points[k + 1]] },
+    { walking: false, points: points.slice(k + 1) },
+  ];
+}
+
 function huxiRoadParts(list, points) {
   if (list[0].region !== '湖西鄉（東環島）') return null;
   const beach = list.findIndex(item => item.name === '隘門沙灘');
@@ -1685,7 +1700,7 @@ function cachedRoad(cacheKey, request) {
 function roadFor(list) {
   const waypoints = list.map(item => item.point);
   const waypointIndex = list.map((_, index) => index);
-  const huxiParts = huxiRoadParts(list, waypoints);
+  const huxiParts = huxiRoadParts(list, waypoints) || northRoadParts(list, waypoints);
   if (huxiParts) {
     const parts = huxiParts.map(part => part.line ? { sections: [{ line: part.line }] } :
       cachedRoad(JSON.stringify([part.walking, true, part.points]), () => roadSections(part.points, part.walking)));
