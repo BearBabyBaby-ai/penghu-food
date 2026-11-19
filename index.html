@@ -644,12 +644,14 @@ const categoryPalette = new Map([
 ]);
 const defaultColor = ['#425e71', '#ebf0f3'];
 const chunkSize = 24;
-// 電腦端修改功能：Google 登入用戶端 ID、寫回後台網址（可修改的帳號由後台核對）
+// 電腦端修改功能：Google 登入用戶端 ID、寫回後台網址（帳號權限由後台依「澎湖資訊推薦後台權限」核對：可完整修改／僅能查看無法修改）
 const editAccess = {
   clientId: '926290817284-nvgf0qndcdcr21g91906flo5kab6igj2.apps.googleusercontent.com',
   endpoint: 'https://script.google.com/macros/s/AKfycbzPUTkOITQJfSksfjFS91nCCBadZQIsTEQtm7XmExZcJYSm0FB6eo0NB-BAfCH3wjINEA/exec'
 };
 let editor = null;
+// 僅能查看的帳號：可登入、可切換類別瀏覽，但不顯示修改、不能寫回
+const canEdit = () => !!editor && editor.role !== 'view';
 // 已按過「顯示更多」的區域：點選卡片重新排序時維持展開，換篩選條件才收回
 const expandedRegions = new Set();
 // 電腦端登入後可切換修改的資料類別
@@ -1092,11 +1094,11 @@ function createCard(item) {
   // 第一行：三欄配置 (店名 │ 類別 │ 導航)
   const top = element('div', 'card-top card-name-line');
   const townLeft = item.sheet === 'speed' || (item.sheet === 'route' && item.town);
-  top.style.gridTemplateColumns = (townLeft ? 'auto ' : '') + 'minmax(0, max-content) minmax(max-content, 1fr) auto' + (editor ? ' auto' : '');
+  top.style.gridTemplateColumns = (townLeft ? 'auto ' : '') + 'minmax(0, max-content) minmax(max-content, 1fr) auto' + (canEdit() ? ' auto' : '');
   if (townLeft) top.append(element('span', 'badge badge-region', item.sheet === 'route' ? item.town : item.region));
   top.append(name, badges);
   if (item.mapUrl) top.append(go);
-  if (editor && !item.readOnly) {
+  if (canEdit() && !item.readOnly) {
     const edit = button('修改', 'action card-edit', () => openEditor(item));
     edit.setAttribute('aria-label', '修改 ' + item.name);
     top.append(edit);
@@ -1327,7 +1329,7 @@ function markerContent(item) {
     go.setAttribute('aria-label', '導航到 ' + item.name);
     header.append(go);
   }
-  if (editor && !item.readOnly) {
+  if (canEdit() && !item.readOnly) {
     header.style.gridTemplateColumns = 'minmax(0, 1fr) auto auto';
     const edit = button('修改', 'popup-go popup-edit', () => {
       map.closePopup();
@@ -2049,8 +2051,8 @@ async function handleCredential(response) {
   const payload = decodeToken(response.credential);
   try {
     const result = await callBackend({ action: 'check', idToken: response.credential });
-    if (!result.ok) throw new Error(result.error || '此帳號沒有修改權限');
-    setEditor({ token: response.credential, email: result.email || payload?.email || '', exp: payload?.exp || 0 });
+    if (!result.ok) throw new Error(result.error || '此帳號沒有後台權限');
+    setEditor({ token: response.credential, email: result.email || payload?.email || '', exp: payload?.exp || 0, role: result.role === 'view' ? 'view' : 'edit' });
     byId('login-dialog').close();
   } catch (error) {
     status.classList.add('is-error');
@@ -2416,6 +2418,7 @@ function showEditPoint(latlng, regenerate) {
 }
 
 function openEditor(item) {
+  if (editor && !canEdit()) return;
   if (!editorValid()) {
     setEditor(null);
     openLogin();
@@ -2458,6 +2461,11 @@ byId('editor-save').addEventListener('click', async () => {
   if (!editorValid()) {
     status.classList.add('is-error');
     status.textContent = '登入已過期，請關閉後重新登入。';
+    return;
+  }
+  if (!canEdit()) {
+    status.classList.add('is-error');
+    status.textContent = '此帳號僅能查看，無法修改。';
     return;
   }
   byId('editor-save').disabled = true;
