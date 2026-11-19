@@ -1423,7 +1423,7 @@ function renderMarkers() {
   const bucketSize = zoom < 13 ? 34 : 24;
 
   const sameSpot = new Map();
-  for (const item of activePoints) if (item.sheet === 'speed') {
+  for (const item of activePoints) if (item.sheet === 'speed' || item.sheet === 'route') {
     const k = item.point.join(',');
     if (!sameSpot.has(k)) sameSpot.set(k, []);
     sameSpot.get(k).push(item);
@@ -1431,7 +1431,7 @@ function renderMarkers() {
   for (const list of sameSpot.values()) list.forEach((item, i) => { item.pinShift = list.length > 1 ? Math.round((i - (list.length - 1) / 2) * 30) : 0; });
   for (const item of activePoints) {
     const pixel = map.project(item.point, zoom);
-    const key = item.sheet === 'speed' ? 'speed|' + item.id : Math.floor(pixel.x / bucketSize) + ',' + Math.floor(pixel.y / bucketSize);
+    const key = item.sheet === 'speed' || item.sheet === 'route' ? item.sheet + '|' + item.id : Math.floor(pixel.x / bucketSize) + ',' + Math.floor(pixel.y / bucketSize);
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(item);
   }
@@ -1453,9 +1453,6 @@ function renderMarkers() {
       points.reduce((sum, p) => sum + p.point[1], 0) / points.length
     ] : item.point;
     const isRoute = !isGroup && item.sheet === 'route' && item.order;
-    // 路線：同一處或相近的多個編號點，圖釘顯示它們的路線編號（不顯示筆數）
-    const routeNumbers = isGroup && points.every(p => p.sheet === 'route' && p.order) ? [...new Set(points.map(p => p.order))].sort((a, b) => a - b) : null;
-    const routeGroupLabel = routeNumbers ? (routeNumbers.length <= 3 ? routeNumbers.join('・') : routeNumbers[0] + '–' + routeNumbers.at(-1)) : '';
     const isSpeed = !isGroup && item.sheet === 'speed';
     const speedDeg = isSpeed ? directionDeg(item.dir) : null;
     const speedHtml = isSpeed
@@ -1465,10 +1462,10 @@ function renderMarkers() {
       : '';
     const marker = L.marker(location, {
       icon: L.divIcon({
-        className: 'pin-icon' + (isActive ? ' is-active' : '') + (isSpeed ? ' speed-pin' : '') + (isRoute || routeGroupLabel ? ' route-pin' : ''),
-        html: isSpeed ? speedHtml : '<span class="pin-dot" style="--pin:' + tone + (routeGroupLabel ? ';border-radius:999px' : '') + '">' + (routeGroupLabel || (isGroup ? points.length : (isRoute ? item.order : ''))) + '</span>',
-        iconSize: isSpeed ? [24, 24] : (routeGroupLabel ? [Math.max(24, routeGroupLabel.length * 8 + 12), 24] : (isRoute ? [24, 24] : [size, size])),
-        ...(isSpeed ? { iconAnchor: [12 - (item.pinShift || 0), 12], popupAnchor: [item.pinShift || 0, -12] } : {})
+        className: 'pin-icon' + (isActive ? ' is-active' : '') + (isSpeed ? ' speed-pin' : '') + (isRoute ? ' route-pin' : ''),
+        html: isSpeed ? speedHtml : '<span class="pin-dot" style="--pin:' + tone + '">' + (isGroup ? points.length : (isRoute ? item.order : '')) + '</span>',
+        iconSize: isSpeed ? [24, 24] : (isRoute ? [24, 24] : [size, size]),
+        ...(isSpeed || isRoute ? { iconAnchor: [12 - (item.pinShift || 0), 12], popupAnchor: [item.pinShift || 0, -12] } : {})
       }),
       title: isGroup ? markerTitle : '',
       zIndexOffset: isActive ? 1000 : 0,
