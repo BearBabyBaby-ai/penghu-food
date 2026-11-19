@@ -1766,6 +1766,7 @@ function drawRouteLines(zoom) {
     }
     let failed = false;
     runs.forEach((run, r) => {
+      run = { ...run, items: run.items.flatMap(item => [item, ...(item.returnVia || [])]) };
       if (r > 0) {   // 跨島（海上）以虛線連接
         const from = runs[r - 1].items[runs[r - 1].items.length - 1].point, to = run.items[0].point;
         const sea = seaFor(from, to);
@@ -2201,15 +2202,11 @@ function autoOrderLoopRoutes(items) {
   }
 }
 
-// 北環島：控制點 6 → 7 → 8 → 7 → 6（走到 8 後原路折返，再接 9）
+// 北環島：控制點 6 → 7 → 8 之後，路線原路折返經 7、6（只畫路線，不重複列出點位）
 function northSpurRoute(items) {
-  const fixed = items.filter(i => i.region === '北環島（白沙、西嶼）' && i.order).sort((a, b) => a.order - b.order);
+  const fixed = items.filter(i => i.region === '北環島（白沙、西嶼）' && i.order);
   const [p6, p7, p8] = [6, 7, 8].map(n => fixed.find(i => i.order === n));
-  if (!p6 || !p7 || !p8) return;
-  const back = (item, tag) => ({ ...item, id: item.id + '@' + tag });
-  const sequence = [...fixed.slice(0, fixed.indexOf(p8) + 1), back(p7, 'back'), back(p6, 'back'), ...fixed.slice(fixed.indexOf(p8) + 1)];
-  sequence.forEach((item, k) => { item.order = k + 1; });
-  items.push(sequence[fixed.indexOf(p8) + 1], sequence[fixed.indexOf(p8) + 2]);
+  if (p6 && p7 && p8) p8.returnVia = [p7, p6];
 }
 
 function mergeDetails(key, items, details) {
