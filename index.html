@@ -1142,25 +1142,13 @@ function createCard(item) {
   return card;
 }
 
-// 行程業者：依行程類別分組（取「代表服務」中最先出現的類別）
-const tourTypeRules = [
-  ['跳島', /跳島/], ['浮潛', /浮潛|潛水/], ['夜釣小管', /夜釣/], ['水上活動', /風帆|滑水|輕艇|SUP|水域活動|水上活動|獨木舟|風浪板/],
-  ['BBQ', /海洋牧場|炭烤|海上料理|海鮮粥|吃到飽/], ['海釣', /海釣|垂釣/]
-];
-function tourTypeOf(item) {
-  const text = item.dish || '';
-  let best = null;
-  for (const [name, re] of tourTypeRules) {
-    const at = text.search(re);
-    if (at >= 0 && (!best || at < best.at)) best = { name, at };
-  }
-  return best ? best.name : (item.tags[0] || '其他行程');
-}
-const tourTypeRank = item => { const k = tourTypeRules.findIndex(([name]) => name === item.tourType); return k < 0 ? 99 : k; };
+// 行程業者：依試算表「分類」欄分組
+const tourTypeOrder = [];
+const tourTypeRank = item => tourTypeOrder.indexOf(item.tourType);
 function groupByRegion(items) {
   const groups = new Map();
   for (const item of items) {
-    const key = dataset === 'tour' && item.tourType ? item.tourType : item.region;
+    const key = dataset === 'tour' ? item.tourType : item.region;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
@@ -2109,8 +2097,8 @@ function directionDeg(text) {
 const DETAIL_SOURCES = {
   speed: { tabId: '777020', columns: 'A,B,C,E,F,G,H,I,J,K', required: 'C',
     parse: ([type, no, name, lat, lng, speed, dir, items, tech, unit]) => ({ name, lat, lng, type, data: { no, speed, dir, items, tech, unit } }) },
-  tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J', required: 'D',
-    parse: ([name, dish, picks, phone, address, hours]) => ({ name, data: { dish, picks, phone, address, hours } }) },
+  tour: { tabId: '1358738412', columns: 'D,E,F,H,I,J,P', required: 'D',
+    parse: ([name, dish, picks, phone, address, hours, tourType]) => ({ name, data: { dish, picks, phone, address, hours, tourType } }) },
   spot: { tabId: '2085392869', columns: 'E,G,H,J,L', required: 'E',
     parse: ([name, lat, lng, pic, desc]) => ({ name, lat, lng, data: { pic, desc } }) },
   port: { tabId: '777001', columns: 'E,G,H,L', required: 'E',
@@ -2266,7 +2254,13 @@ async function switchDataset(key) {
           if (trips.length) item.tripImages = trips;
         }
       }
-      if (key === 'tour') for (const item of items) item.tourType = tourTypeOf(item);
+      if (key === 'tour') {
+        tourTypeOrder.length = 0;
+        for (const item of items) {
+          item.tourType = item.tourType || '未分類';
+          if (!tourTypeOrder.includes(item.tourType)) tourTypeOrder.push(item.tourType);
+        }
+      }
       datasetCache.set(key, items);
     } catch (error) {
       byId('results-count').textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
