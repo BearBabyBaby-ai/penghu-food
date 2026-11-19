@@ -2201,16 +2201,15 @@ function autoOrderLoopRoutes(items) {
   }
 }
 
-// 北環島：起點 → 澎湖水族館 → 波浪堤坊 → 城前牡蠣寶寶 → 波浪堤坊 → 澎湖水族館 → 漁翁島遊客中心 → 西嶼燈塔 → 終點
+// 北環島：控制點 6 → 7 → 8 → 7 → 6（走到 8 後原路折返，再接 9）
 function northSpurRoute(items) {
-  const area = items.filter(i => i.region === '北環島（白沙、西嶼）');
-  const fixed = area.filter(i => i.order).sort((a, b) => a.order - b.order);
-  const [aquarium, wave, oyster] = ['澎湖水族館', '波浪堤坊', '城前牡蠣寶寶'].map(name => area.find(i => i.name === name));
-  if (fixed.length < 2 || !aquarium || !wave || !oyster) return;
+  const fixed = items.filter(i => i.region === '北環島（白沙、西嶼）' && i.order).sort((a, b) => a.order - b.order);
+  const [p6, p7, p8] = [6, 7, 8].map(n => fixed.find(i => i.order === n));
+  if (!p6 || !p7 || !p8) return;
   const back = (item, tag) => ({ ...item, id: item.id + '@' + tag });
-  const sequence = [fixed[0], aquarium, wave, oyster, back(wave, 'back'), back(aquarium, 'back'), ...fixed.slice(1)];
+  const sequence = [...fixed.slice(0, fixed.indexOf(p8) + 1), back(p7, 'back'), back(p6, 'back'), ...fixed.slice(fixed.indexOf(p8) + 1)];
   sequence.forEach((item, k) => { item.order = k + 1; });
-  items.push(sequence[4], sequence[5]);
+  items.push(sequence[fixed.indexOf(p8) + 1], sequence[fixed.indexOf(p8) + 2]);
 }
 
 function mergeDetails(key, items, details) {
