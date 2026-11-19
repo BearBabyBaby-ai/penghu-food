@@ -741,10 +741,10 @@ let sheetRequestId = Date.now() % 1000000000;
 // 固定回應函式可安全忽略逾時後才到達的回應。
 window.penghuFoodSheetReply = response => sheetReplies.get(String(response?.reqId))?.(response);
 
-function fetchSheetRows({ tabId, columns, requiredColumn }) {
+function fetchSheetRows({ tabId, columns, requiredColumn, spreadsheetId }) {
   return new Promise((resolve, reject) => {
     const requestId = String(++sheetRequestId);
-    const query = new URL('https://docs.google.com/spreadsheets/d/' + foodSheet.spreadsheetId + '/gviz/tq');
+    const query = new URL('https://docs.google.com/spreadsheets/d/' + (spreadsheetId || foodSheet.spreadsheetId) + '/gviz/tq');
     query.searchParams.set('gid', tabId);
     query.searchParams.set('headers', '1');
     query.searchParams.set('tq', 'select ' + columns + (requiredColumn ? ' where ' + requiredColumn + ' is not null' : ''));
@@ -1142,11 +1142,27 @@ function createCard(item) {
   return card;
 }
 
+// 行程業者：依行程類別分組（取「代表服務」中最先出現的類別）
+const tourTypeRules = [
+  ['跳島', /跳島/], ['浮潛', /浮潛|潛水/], ['夜釣小管', /夜釣/], ['水上活動', /風帆|滑水|輕艇|SUP|水域活動|水上活動|獨木舟|風浪板/],
+  ['BBQ', /海洋牧場|炭烤|海上料理|海鮮粥|吃到飽/], ['海釣', /海釣|垂釣/]
+];
+function tourTypeOf(item) {
+  const text = item.dish || '';
+  let best = null;
+  for (const [name, re] of tourTypeRules) {
+    const at = text.search(re);
+    if (at >= 0 && (!best || at < best.at)) best = { name, at };
+  }
+  return best ? best.name : (item.tags[0] || '其他行程');
+}
+const tourTypeRank = item => { const k = tourTypeRules.findIndex(([name]) => name === item.tourType); return k < 0 ? 99 : k; };
 function groupByRegion(items) {
   const groups = new Map();
   for (const item of items) {
-    if (!groups.has(item.region)) groups.set(item.region, []);
-    groups.get(item.region).push(item);
+    const key = dataset === 'tour' && item.tourType ? item.tourType : item.region;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
   }
   return groups;
 }
@@ -1261,6 +1277,7 @@ function filterFood() {
     words.every(word => item.search.includes(word))
   ).sort((a, b) => {
     if (dataset === 'speed') return (Number(a.no) || 9999) - (Number(b.no) || 9999) || a.row - b.row;
+    if (dataset === 'tour') return tourTypeRank(a) - tourTypeRank(b) || (order.get(a.region) ?? 99) - (order.get(b.region) ?? 99);
     if (isRouteSet() && state.sub === '南海二島(七美、望安)') return southSeaOrder(a.region) - southSeaOrder(b.region) || (a.order || 9999) - (b.order || 9999);
     if (isRouteSet()) {
       const rank = region => { const k = [magongHeritageRoute, magongSuburbanRoute, '馬公市區', '北環島（白沙、西嶼）', '澎南區域（南環島）', '湖西鄉（東環島）', '吉貝', '南海二島(七美、望安)', '南方四島(七美、東吉、藍洞巡航)', '七美、藍洞', '七美鄉', '望安鄉'].indexOf(region); return k < 0 ? 99 : k; };
@@ -2249,6 +2266,7 @@ async function switchDataset(key) {
           if (trips.length) item.tripImages = trips;
         }
       }
+      if (key === 'tour') for (const item of items) item.tourType = tourTypeOf(item);
       datasetCache.set(key, items);
     } catch (error) {
       byId('results-count').textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
@@ -2511,21 +2529,9 @@ let forecastStore = {}, forecastChartInstance = null, forecastDateList = [], for
 const getISODate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 let forecastRows = null; 
 async function fetchForecastRows() {
-  const urls = [
-    `https://docs.google.com/spreadsheets/d/${CFG.mapSheetId}/export?format=csv&gid=${FORECAST_SHEET.gid}&_=${Date.now()}`,
-    `https://docs.google.com/spreadsheets/d/${CFG.mapSheetId}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(FORECAST_SHEET.key)}&_=${Date.now()}`
-  ];
-  let lastErr;
-  for (const url of urls) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const rows = Papa.parse((await res.text()).replace(/\r/g, ''), { skipEmptyLines: true }).data;
-      if (rows.length && String(rows[0][0] || '').includes('日期')) return rows;
-      throw new Error('資料格式不符');
-    } catch (err) { lastErr = err; }
-  }
-  throw lastErr;
+  const rows = await fetchSheetRows({ spreadsheetId: CFG.tideSheetId, tabId: FORECAST_SHEET.gid, columns: 'A,B,C,D,E,F,G,H,I' });
+  const text = cell => String(cell?.f ?? cell?.v ?? '').trim();
+  return [['日期'], ...rows.map(r => Array.from({ length: 9 }, (_, i) => text(r?.c?.[i])))];
 }
 async function loadForecastData(regionName) {
   const loading = $('forecastLoading');
@@ -2944,6 +2950,7 @@ const Wx = (() => {
   function render() {
     const box = $('wxPane');
     if (!box) return;
+    if (!fc && !loading) load();
     if (!fc) { box.innerHTML = `${picker()}<div class="xb-empty">${error ? esc(error) : `正在讀取${area}風浪天氣…`}</div>`; return; }
     const H = fc.hourly, D = fc.daily, i0 = nowIdx();
     const hours = [];
@@ -2964,6 +2971,7 @@ const Wx = (() => {
   function renderHome() {
     const box = $('homeWx');
     if (!box) return;
+    if (!fc && !loading) load();
     if (!fc) { box.innerHTML = `<span class="h-muted">${error ? esc(error) : '正在讀取風浪天氣…'}</span>`; return; }
     box.className = '';
     box.innerHTML = `<div class="h-sub" style="margin-top:0">${area}</div>` + nowHtml().replace('class="wx-now"', 'class="wx-now" style="box-shadow:none;border:0;padding:0;margin:0"');
