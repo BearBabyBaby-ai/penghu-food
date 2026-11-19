@@ -1361,6 +1361,7 @@ function focusCard(item) {
     renderResults();
   }
   setSelection(item);
+  lastListProgrammatic = Date.now() + 1500;   // 點選店家造成的清單捲動，不要反過來把地圖拉回區域
   const root = byId('results');
   const card = byId(item.id);
   if (card) root.scrollTop += card.getBoundingClientRect().top - root.getBoundingClientRect().top - 4;
@@ -1370,6 +1371,7 @@ function selectPoint(item) {
   if (!map || !activePoints.includes(item)) return;
   focusCard(item);
   lastProgrammatic = Date.now();
+  lastListProgrammatic = Date.now() + 1500;
   map.setView(item.point, 21, { animate: false });
   renderMarkers();
   drawnMarkers.get(item.id)?.openPopup();
@@ -1832,7 +1834,7 @@ function routeGroupPoints() {
 }
 let syncedRegion = '', lastListProgrammatic = 0;
 function syncMapToList() {
-  if (!isRouteSet() || !map || Date.now() - lastListProgrammatic < 900) return;
+  if (!isRouteSet() || !map || selected || Date.now() - lastListProgrammatic < 900) return;
   const points = routeGroupPoints();
   const region = points[0]?.region || '';
   if (region === syncedRegion) return;
@@ -1874,7 +1876,9 @@ function updateMap() {
   byId('map-status').textContent = area + '・' + activePoints.length + (isRouteSet() ? ' 個可定位路線點位' : ' 筆可定位店家');
   map.invalidateSize({ pan: false });
   updateZoomFloor();
-  if (isRouteSet() && activePoints.length) {
+  if (isRouteSet() && activePoints.length && selected) {
+    // 已選取店家：保持目前地圖位置
+  } else if (isRouteSet() && activePoints.length) {
     const gp = routeGroupPoints();
     syncedRegion = gp[0]?.region || '';
     fitPoints(gp, 15);   // 路線：地圖專注清單第一個區域
@@ -2221,6 +2225,16 @@ async function switchDataset(key) {
         const removed = [];
         for (let i = items.length - 1; i >= 0; i--) {
           if (outlying.test([items[i].name, items[i].location, items[i].town, items[i].status].join(' '))) removed.unshift(...items.splice(i, 1));
+        }
+        // 路線景點／廟宇：帶入景點、廟宇分頁的圖片（先比座標，再比名稱）
+        for (const src of ['spot', 'temple']) {
+          const det = await loadDatasetDetails(src).catch(() => ({ full: new Map(), byName: new Map() }));
+          for (const list of [items, removed]) for (const it of list) {
+            if (it.pic) continue;
+            let d = it.point && det.full.get(it.name + '|' + it.point[0] + '|' + it.point[1]);
+            if (!d || !d.pic) d = det.byName.get(it.name);
+            if (d && d.pic) it.pic = d.pic;
+          }
         }
         datasetCache.set('routeOutlying', removed);
         autoOrderLoopRoutes(items);
