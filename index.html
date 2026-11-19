@@ -1632,19 +1632,47 @@ async function roadSections(points, walking) {
   }
 }
 
+// 北環島：依指定道路加入途經點，避免繞進村落小路或沙灘
+const northVias = [
+  { from: '哈密瓜車站', to: '通樑古榕', via: [[23.661623, 119.566063], [23.660203, 119.565001], [23.658924, 119.562181], [23.658246, 119.559069], [23.657287, 119.557682]] },
+  { from: '漁翁島遊客中心', to: '嗨鼠造景', via: [[23.657361, 119.555226], [23.656507, 119.556469], [23.657287, 119.557682], [23.658246, 119.559069], [23.658677, 119.561598], [23.659839, 119.564239], [23.660749, 119.566004], [23.661822, 119.568132], [23.66245, 119.57019]] },
+  { from: '夢幻沙灘', to: '小池角雙曲橋', via: [[23.614177, 119.51171], [23.613411, 119.513215], [23.611151, 119.514844], [23.609267, 119.514527], [23.607777, 119.514173]] },
+];
+for (const { via } of northVias) for (const point of via) routeRoadConstraints.set(point, { radius: 25, bearing: '' });
+
+// 北環島 9→10（通梁漁港沿岸）
+const northHarborRoad = [[23.656524, 119.557127], [23.656524, 119.556479], [23.657308, 119.55583], [23.657332, 119.555182]];
+
 // 北環島 7→8（後寮沿海）：依指定的沿海路線繪製，8 回到 7 走同一條
 const northCoastRoad = [[23.6739233, 119.577328], [23.6740635, 119.5775066], [23.6742038, 119.5776853], [23.6743441, 119.5778256], [23.6744843, 119.5779405], [23.6746246, 119.5780681], [23.6747648, 119.5781701], [23.6749051, 119.578285], [23.6750453, 119.5784126], [23.6751856, 119.5785274], [23.6753258, 119.5786167], [23.6754661, 119.5786805], [23.6756064, 119.5787316], [23.6757466, 119.5787316], [23.6758869, 119.5787443]];
 function northRoadParts(list, points) {
   if (list[0].region !== '北環島（白沙、西嶼）') return null;
+  const pts = [], at = [];
+  list.forEach((item, i) => {
+    at.push(pts.length);
+    pts.push(points[i]);
+    const via = northVias.find(v => v.from === item.name && v.to === list[i + 1]?.name)?.via;
+    if (via) pts.push(...via);
+  });
+  // 指定固定路線的路段（第 i 點 → 第 i+1 點）
+  const cuts = [];
   const k = list.findIndex(item => item.returnVia);
   const back = list[k]?.returnVia?.[0];
-  if (k < 1 || list[k - 1] !== back || list[k + 1] !== back) return null;
-  return [
-    { walking: false, points: points.slice(0, k) },
-    { line: [points[k - 1], ...northCoastRoad] },
-    { line: [...[...northCoastRoad].reverse(), points[k + 1]] },
-    { walking: false, points: points.slice(k + 1) },
-  ];
+  if (k >= 1 && list[k - 1] === back && list[k + 1] === back) {
+    cuts.push({ i: k - 1, line: [points[k - 1], ...northCoastRoad] });
+    cuts.push({ i: k, line: [...[...northCoastRoad].reverse(), points[k + 1]] });
+  }
+  const h = list.findIndex((item, i) => item.name === '通樑古榕' && list[i + 1]?.name === '澎湖跨海大橋');
+  if (h >= 0) cuts.push({ i: h, line: [points[h], ...northHarborRoad, points[h + 1]] });
+  const parts = [];
+  let start = 0;
+  for (const cut of cuts.sort((x, y) => x.i - y.i)) {
+    if (at[cut.i] + 1 - at[start] >= 2) parts.push({ walking: false, points: pts.slice(at[start], at[cut.i] + 1) });
+    parts.push({ line: cut.line });
+    start = cut.i + 1;
+  }
+  if (pts.length - at[start] >= 2) parts.push({ walking: false, points: pts.slice(at[start]) });
+  return parts;
 }
 
 function huxiRoadParts(list, points) {
@@ -1676,13 +1704,32 @@ function huxiRoadParts(list, points) {
   return parts;
 }
 
+// 算好的道路存在瀏覽器：同一條路線下次開啟直接畫出，不必重新向路線服務查詢
+function roadStoreKey(cacheKey) {
+  let hash = 0;
+  for (let i = 0; i < cacheKey.length; i++) hash = (hash * 31 + cacheKey.charCodeAt(i)) | 0;
+  return 'penghuRoad1:' + hash + ':' + cacheKey.length;
+}
+function loadStoredRoad(cacheKey) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(roadStoreKey(cacheKey)) || 'null');
+    return saved && saved.k === cacheKey ? saved.d : null;
+  } catch { return null; }
+}
+function saveStoredRoad(cacheKey, road) {
+  if (!road || road.incomplete || !road.sections?.length) return;
+  try { localStorage.setItem(roadStoreKey(cacheKey), JSON.stringify({ k: cacheKey, d: road })); } catch { /* 空間不足時略過 */ }
+}
 function cachedRoad(cacheKey, request) {
   if (!roadCache.has(cacheKey)) {
+    const stored = loadStoredRoad(cacheKey);
+    if (stored) { roadCache.set(cacheKey, stored); return stored; }
     roadCache.set(cacheKey, null);
     request()
       .then(road => {
         roadTries.delete(cacheKey);
         roadCache.set(cacheKey, road);
+        saveStoredRoad(cacheKey, road);
         if (isRouteSet()) renderMarkers();
       })
       .catch(() => {   // 讀取失敗：稍後自動重試（最多 4 次），不畫直線
