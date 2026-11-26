@@ -12,6 +12,8 @@
 <script>
 // 嵌入模式（被其他網頁以 iframe 框住）時隱藏頂部 banner
 if (window.self !== window.top) document.documentElement.classList.add('embedded');
+// 在熊寶總控系統裡開啟：呈現內部專用（登入後）的介面
+try { if (window.self !== window.top && window.parent.location.pathname.startsWith('/project-index/')) document.documentElement.classList.add('ctl'); } catch {}
 </script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" />
 <style>
@@ -47,6 +49,7 @@ if (window.self !== window.top) document.documentElement.classList.add('embedded
   .hero-stat { margin: 0; white-space: nowrap; padding: 5px 10px; border: 1px solid #67969f; border-radius: 9px; color: #e5f4f4; font-size: .82rem; }
   .hero-stat strong { color: white; font-size: .94rem; }
   .embedded .hero { display: none; }
+  .ctl .corner-login { position: fixed; z-index: 900; top: 8px; right: 10px; background: var(--navy); border-color: #77b9bd; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
   .hero-side { display: flex; align-items: center; gap: 8px; }
   .login-btn { min-height: 32px; padding: 0 10px; border: 1px solid #67969f; border-radius: 8px; background: transparent; color: #e5f4f4; font-size: .78rem; font-weight: 700; white-space: nowrap; }
   .login-btn:hover { background: #234a5d; }
@@ -2107,6 +2110,7 @@ function loadGoogleSignIn() {
 
 async function handleCredential(response) {
   const status = byId('login-status');
+  const dlg = byId('login-dialog');
   status.classList.remove('is-error');
   status.textContent = '確認帳號中…';
   const payload = decodeToken(response.credential);
@@ -2116,6 +2120,7 @@ async function handleCredential(response) {
     setEditor({ token: response.credential, email: result.email || payload?.email || '', exp: payload?.exp || 0, role: result.role === 'view' ? 'view' : 'edit' });
     byId('login-dialog').close();
   } catch (error) {
+    if (!dlg.open) dlg.showModal();
     status.classList.add('is-error');
     status.textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
   }
@@ -2160,6 +2165,26 @@ try {
   const saved = JSON.parse(sessionStorage.getItem('penghuFoodEditor') || 'null');
   if (saved && saved.exp * 1000 > Date.now() + 60000) setEditor(saved);
 } catch {}
+
+// 熊寶總控系統內：登入鈕放右上角；還沒登入就先自動用 Google 帳號登入，不行才跳出登入視窗
+if (document.documentElement.classList.contains('ctl')) {
+  const btn = byId('login');
+  btn.classList.add('corner-login');
+  document.body.append(btn);
+  if (!editorValid()) ctlAutoLogin();
+}
+async function ctlAutoLogin() {
+  let asked = false;
+  const fallback = () => { if (asked || editorValid()) return; asked = true; openLogin(); };
+  try {
+    await loadGoogleSignIn();
+    google.accounts.id.initialize({ client_id: editAccess.clientId, callback: r => { asked = true; handleCredential(r); }, auto_select: true, ux_mode: 'popup' });
+    google.accounts.id.prompt(n => {
+      if (n && ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment()) || (n.isDismissedMoment && n.isDismissedMoment() && !editorValid()))) fallback();
+    });
+    setTimeout(fallback, 8000);
+  } catch { fallback(); }
+}
 
 
 // 離島路線的組合路線：南海二島＝先七美、再望安；南方四島＝先東吉嶼、西吉嶼藍洞、再七美
@@ -2557,6 +2582,7 @@ byId('editor-save').addEventListener('click', async () => {
       renderMarkers();
     }
   } catch (error) {
+    if (!dlg.open) dlg.showModal();
     status.classList.add('is-error');
     status.textContent = error.message === 'Failed to fetch' ? '無法連線，請稍後再試。' : error.message;
     byId('editor-save').disabled = false;
